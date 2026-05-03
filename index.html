@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>グループ抽選（番号・配置図対応）</title>
+<style>
+  :root {
+    --bg: #f6f8fb;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent2: #f97316;
+    --danger: #dc2626;
+    --ok: #16a34a;
+    --border: #dbe3ef;
+    --shadow: 0 12px 28px rgba(15, 23, 42, .08);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", sans-serif;
+    color: var(--text);
+    background: radial-gradient(circle at top left, #e0f2fe 0, transparent 32%), linear-gradient(135deg, #f8fafc, #eef2ff);
+  }
+  body { padding-bottom: env(safe-area-inset-bottom); }
+  .wrap {
+    width: min(960px, 100%);
+    margin: 0 auto;
+    padding: 22px 16px 42px;
+    text-align: center;
+  }
+  h1 {
+    margin: 8px 0 8px;
+    font-size: clamp(26px, 5vw, 40px);
+    letter-spacing: .02em;
+  }
+  .sub {
+    margin: 0 auto 18px;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.75;
+  }
+  .topbar {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 8px 0 16px;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 11px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.85);
+    border: 1px solid rgba(148,163,184,.35);
+    color: #475569;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .pill.ok { color: #166534; background: #ecfdf5; border-color: #bbf7d0; }
+  .pill.warn { color: #9a3412; background: #fff7ed; border-color: #fed7aa; }
+  .card {
+    background: rgba(255,255,255,.95);
+    border: 1px solid rgba(255,255,255,.7);
+    border-radius: 28px;
+    padding: 26px 18px;
+    min-height: 320px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    box-shadow: var(--shadow);
+    margin-bottom: 18px;
+  }
+  .resultSymbol {
+    font-size: clamp(76px, 19vw, 158px);
+    line-height: 1;
+    margin: 0 0 14px;
+    font-weight: 900;
+    letter-spacing: .02em;
+    color: var(--accent);
+  }
+  .resultSymbol.fruit { color: inherit; }
+  .resultName {
+    font-size: clamp(25px, 6vw, 46px);
+    font-weight: 900;
+    line-height: 1.2;
+  }
+  .resultSub {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: clamp(15px, 3.5vw, 18px);
+    line-height: 1.65;
+    font-weight: 700;
+  }
+  .status {
+    margin-top: 14px;
+    font-size: 15px;
+    color: #334155;
+    font-weight: 700;
+  }
+  .actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 12px 0 6px;
+  }
+  button, select, input, textarea {
+    font-family: inherit;
+  }
+  button {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    border-radius: 999px;
+    font-size: 17px;
+    font-weight: 800;
+    padding: 14px 22px;
+    min-width: 154px;
+    box-shadow: 0 7px 18px rgba(15, 23, 42, .10);
+    cursor: pointer;
+    transition: transform .08s ease, opacity .18s ease;
+  }
+  button:active { transform: translateY(1px) scale(.99); }
+  button:disabled { cursor: not-allowed; opacity: .55; box-shadow: none; }
+  .primary { background: var(--accent); color: white; min-width: 226px; font-size: 21px; padding: 18px 28px; }
+  .secondary { background: #ffffff; color: #1f2937; border: 1px solid #d1d5db; }
+  .danger { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+  .smallBtn { min-width: auto; font-size: 14px; padding: 10px 14px; }
+  .meta, .note {
+    margin: 14px auto 0;
+    max-width: 760px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.75;
+  }
+  .noteBox {
+    margin: 18px auto 0;
+    padding: 13px 15px;
+    max-width: 760px;
+    text-align: left;
+    background: rgba(255,255,255,.82);
+    border: 1px dashed #cbd5e1;
+    border-radius: 16px;
+    color: #475569;
+    line-height: 1.7;
+    font-size: 14px;
+  }
+  .badges {
+    margin: 16px auto 0;
+    max-width: 860px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    background: rgba(255,255,255,.92);
+    border: 1px solid rgba(148,163,184,.32);
+    padding: 7px 10px;
+    border-radius: 999px;
+    margin: 4px;
+    font-size: 14px;
+    font-weight: 800;
+    box-shadow: 0 2px 8px rgba(15,23,42,.04);
+  }
+  .mapPanel {
+    display: none;
+    margin: 20px auto 0;
+    max-width: 900px;
+    background: rgba(255,255,255,.94);
+    border: 1px solid rgba(255,255,255,.8);
+    border-radius: 22px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+    text-align: left;
+  }
+  .mapPanel.show { display: block; }
+  .mapPanel h2, .admin h2 {
+    margin: 2px 0 12px;
+    font-size: 20px;
+    text-align: center;
+  }
+  .tableWrap { overflow-x: auto; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 420px;
+    background: white;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  th, td {
+    border: 1px solid #e2e8f0;
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 14px;
+  }
+  th { background: #eff6ff; color: #1d4ed8; font-weight: 900; }
+  td.groupCell {
+    font-size: 18px;
+    font-weight: 900;
+    color: #1f2937;
+    background: #ffffff;
+  }
+  td.empty { background: #f8fafc; color: #cbd5e1; }
+  .admin {
+    display: none;
+    margin: 24px auto 0;
+    max-width: 900px;
+    padding: 18px;
+    border-radius: 22px;
+    background: rgba(255,255,255,.96);
+    border: 1px solid rgba(255,255,255,.8);
+    box-shadow: var(--shadow);
+    text-align: left;
+  }
+  .admin.show { display: block; }
+  .adminGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  @media (max-width: 760px) {
+    .adminGrid { grid-template-columns: 1fr; }
+  }
+  .field {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 12px;
+  }
+  .field label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: #475569;
+    font-weight: 900;
+  }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 11px 12px;
+    font-size: 16px;
+    background: white;
+    color: var(--text);
+  }
+  .field textarea { min-height: 76px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .checkRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+  }
+  .checkRow input { width: 22px; height: 22px; }
+  .adminActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 14px;
+  }
+  .counts {
+    margin-top: 16px;
+    display: none;
+  }
+  .counts.show { display: block; }
+  .countGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    gap: 8px;
+  }
+  .countItem {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 9px;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+  }
+  .countItem strong { display: block; font-size: 19px; margin-bottom: 3px; }
+  #secretHotspot {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 62px;
+    height: 62px;
+    z-index: 9999;
+    background: transparent;
+  }
+  code { background: #f1f5f9; padding: 2px 5px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div id="secretHotspot" aria-hidden="true"></div>
+
+<div class="wrap">
+  <h1>グループ抽選</h1>
+  <p class="sub" id="leadText">抽選は1回だけ行えます。同じ番号の人どうしで集まってください。</p>
+
+  <div class="topbar">
+    <span class="pill" id="modePill">番号版</span>
+    <span class="pill" id="planPill">80人・4人組・4列</span>
+    <span class="pill warn" id="syncPill">ローカル版</span>
+  </div>
+
+  <section class="card" aria-live="polite">
+    <div id="resultSymbol" class="resultSymbol">🎲</div>
+    <div id="resultName" class="resultName">待機中</div>
+    <div id="resultSub" class="resultSub">抽選ボタンを押してください。</div>
+    <div id="status" class="status">まだ抽選していません</div>
+  </section>
+
+  <div class="actions">
+    <button id="drawButton" class="primary" type="button">抽選する</button>
+    <button id="mapButton" class="secondary" type="button">配置図を表示</button>
+  </div>
+
+  <div class="meta" id="metaText">
+    左上を5回タップすると，教員用管理画面が開きます。
+  </div>
+
+  <div class="badges" id="list"></div>
+
+  <section class="mapPanel" id="mapPanel">
+    <h2>配置図</h2>
+    <div class="tableWrap" id="mapTableWrap"></div>
+    <div class="note" id="mapNote"></div>
+  </section>
+
+  <section class="admin" id="adminPanel">
+    <h2>教員用管理画面</h2>
+    <div class="adminGrid">
+      <div class="field">
+        <label for="adminCode">管理コード</label>
+        <input id="adminCode" type="password" placeholder="初期値：reset2026">
+      </div>
+      <div class="field">
+        <label for="modeSelect">表示方式</label>
+        <select id="modeSelect">
+          <option value="number">番号版：A1，A2，B1…</option>
+          <option value="fruit">果物版：りんご，みかん…</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="totalStudentsInput">全体人数</label>
+        <input id="totalStudentsInput" type="number" min="1" max="600" step="1">
+      </div>
+      <div class="field">
+        <label for="groupSizeInput">1グループ人数</label>
+        <input id="groupSizeInput" type="number" min="1" max="20" step="1">
+      </div>
+      <div class="field">
+        <label for="columnCountInput">列数</label>
+        <input id="columnCountInput" type="number" min="1" max="12" step="1">
+      </div>
+      <div class="field">
+        <label>日付変更時の自動リセット</label>
+        <div class="checkRow">
+          <input id="autoDailyResetInput" type="checkbox">
+          <span>オンにする</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="noteBox">
+      <strong>使い分け：</strong><br>
+      Firebase設定が入っている場合は，全員共通で残数を管理し，A1が4人に達したらそれ以上割り当てません。<br>
+      Firebase未設定の場合もページ自体は動きますが，残数管理は端末ごとになります。授業本番で厳密に4人ずつにする場合はFirebase設定版を使ってください。
+    </div>
+
+    <div class="adminActions">
+      <button id="saveSettingsButton" class="secondary" type="button">設定を保存</button>
+      <button id="resetDeviceButton" class="secondary" type="button">この端末をリセット</button>
+      <button id="resetAllButton" class="danger" type="button">全員分をリセット</button>
+      <button id="countsButton" class="secondary" type="button">抽選状況を表示</button>
+    </div>
+
+    <div class="counts" id="countsPanel">
+      <h2>抽選状況</h2>
+      <div id="countsGrid" class="countGrid"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  // ==============================
+  // Firebaseを使う場合だけ，以下を自分のFirebase設定に置き換えてください。
+  // 未設定のままでも，端末ごとのローカル抽選として動きます。
+  // ==============================
+  var FIREBASE_CONFIG = {
+    apiKey: "AIzaSyC76zpFCk7EoB9qTofF9nYVgXvzR7aUrUY",
+    authDomain: "class-group-picker.firebaseapp.com",
+    databaseURL: "https://class-group-picker-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "class-group-picker",
+    storageBucket: "class-group-picker.firebasestorage.app",
+    messagingSenderId: "756663742740",
+    appId: "1:756663742740:web:fae503b097b9c814475201"
+  };
+  var ROOM_ID = "default-class"; // クラスごとに変えると，抽選状況を分けられます。
+
+  var DEFAULT_SETTINGS = {
+    mode: "number",
+    totalStudents: 80,
+    groupSize: 4,
+    columnCount: 4,
+    autoDailyReset: false,
+    resetCode: "reset2026",
+    lastResetDate: todayKey(),
+    sessionId: "session-1"
+  };
+
+  var FRUITS = [
+    { id: "apple", label: "りんご", emoji: "🍎" },
+    { id: "orange", label: "みかん", emoji: "🍊" },
+    { id: "grape", label: "ぶどう", emoji: "🍇" },
+    { id: "strawberry", label: "いちご", emoji: "🍓" },
+    { id: "banana", label: "バナナ", emoji: "🍌" },
+    { id: "peach", label: "もも", emoji: "🍑" },
+    { id: "cherry", label: "さくらんぼ", emoji: "🍒" },
+    { id: "pineapple", label: "パイナップル", emoji: "🍍" }
+  ];
+
+  var SETTINGS_KEY = "group_picker_settings_v1";
+  var LOCK_KEY = "group_picker_locked_v1";
+  var RESULT_KEY = "group_picker_result_v1";
+  var LOCK_DATE_KEY = "group_picker_locked_date_v1";
+  var DEVICE_ID_KEY = "group_picker_device_id_v1";
+
+  var appState = {
+    settings: loadLocalSettings(),
+    groups: [],
+    firebase: null,
+    db: null,
+    firebaseFns: null,
+    firebaseReady: false,
+    countsVisible: false
+  };
+
+  var els = {
+    leadText: document.getElementById("leadText"),
+    modePill: document.getElementById("modePill"),
+    planPill: document.getElementById("planPill"),
+    syncPill: document.getElementById("syncPill"),
+    resultSymbol: document.getElementById("resultSymbol"),
+    resultName: document.getElementById("resultName"),
+    resultSub: document.getElementById("resultSub"),
+    status: document.getElementById("status"),
+    drawButton: document.getElementById("drawButton"),
+    mapButton: document.getElementById("mapButton"),
+    metaText: document.getElementById("metaText"),
+    list: document.getElementById("list"),
+    mapPanel: document.getElementById("mapPanel"),
+    mapTableWrap: document.getElementById("mapTableWrap"),
+    mapNote: document.getElementById("mapNote"),
+    adminPanel: document.getElementById("adminPanel"),
+    hotspot: document.getElementById("secretHotspot"),
+    adminCode: document.getElementById("adminCode"),
+    modeSelect: document.getElementById("modeSelect"),
+    totalStudentsInput: document.getElementById("totalStudentsInput"),
+    groupSizeInput: document.getElementById("groupSizeInput"),
+    columnCountInput: document.getElementById("columnCountInput"),
+    autoDailyResetInput: document.getElementById("autoDailyResetInput"),
+    saveSettingsButton: document.getElementById("saveSettingsButton"),
+    resetDeviceButton: document.getElementById("resetDeviceButton"),
+    resetAllButton: document.getElementById("resetAllButton"),
+    countsButton: document.getElementById("countsButton"),
+    countsPanel: document.getElementById("countsPanel"),
+    countsGrid: document.getElementById("countsGrid")
+  };
+
+  init();
+
+  async function init() {
+    ensureDeviceId();
+    renderAll();
+    await setupFirebaseIfPossible();
+    if (appState.firebaseReady) {
+      await loadSettingsFromFirebase();
+      await performFirebaseDailyResetIfNeeded();
+    } else {
+      performLocalDailyResetIfNeeded();
+    }
+    renderAll();
+    await restoreState();
+    bindEvents();
+  }
+
+  function bindEvents() {
+    els.drawButton.addEventListener("click", draw);
+    els.mapButton.addEventListener("click", function () {
+      els.mapPanel.classList.toggle("show");
+      els.mapButton.textContent = els.mapPanel.classList.contains("show") ? "配置図を隠す" : "配置図を表示";
+    });
+
+    var tapCount = 0;
+    var firstTapTime = 0;
+    els.hotspot.addEventListener("click", function () {
+      var now = Date.now();
+      if (!firstTapTime || now - firstTapTime > 2500) {
+        firstTapTime = now;
+        tapCount = 1;
+      } else {
+        tapCount += 1;
+      }
+      if (tapCount >= 5) {
+        els.adminPanel.classList.toggle("show");
+        tapCount = 0;
+        firstTapTime = 0;
+      }
+    });
+
+    els.saveSettingsButton.addEventListener("click", saveSettingsFromAdmin);
+    els.resetDeviceButton.addEventListener("click", resetThisDeviceFromAdmin);
+    els.resetAllButton.addEventListener("click", resetAllFromAdmin);
+    els.countsButton.addEventListener("click", toggleCounts);
+  }
+
+  function todayKey() {
+    var d = new Date();
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, "0");
+    var day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  }
+
+  function loadLocalSettings() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      return normalizeSettings(Object.assign({}, DEFAULT_SETTINGS, saved));
+    } catch (e) {
+      return Object.assign({}, DEFAULT_SETTINGS);
+    }
+  }
+
+  function saveLocalSettings(settings) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
+  function normalizeSettings(s) {
+    var out = Object.assign({}, DEFAULT_SETTINGS, s || {});
+    out.mode = out.mode === "fruit" ? "fruit" : "number";
+    out.totalStudents = clampInt(out.totalStudents, 1, 600, 80);
+    out.groupSize = clampInt(out.groupSize, 1, 20, 4);
+    out.columnCount = clampInt(out.columnCount, 1, 12, 4);
+    out.autoDailyReset = !!out.autoDailyReset;
+    out.resetCode = out.resetCode || "reset2026";
+    out.lastResetDate = out.lastResetDate || todayKey();
+    out.sessionId = out.sessionId || String(Date.now());
+    return out;
+  }
+
+  function clampInt(value, min, max, fallback) {
+    var n = parseInt(value, 10);
+    if (!Number.isFinite(n)) n = fallback;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function firebaseConfigIsReady() {
+    return !!(FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL && FIREBASE_CONFIG.appId);
+  }
+
+  async function setupFirebaseIfPossible() {
+    if (!firebaseConfigIsReady()) {
+      appState.firebaseReady = false;
+      return;
+    }
+    try {
+      var appModule = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
+      var dbModule = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js");
+      appState.firebase = appModule.initializeApp(FIREBASE_CONFIG);
+      appState.db = dbModule.getDatabase(appState.firebase);
+      appState.firebaseFns = dbModule;
+      appState.firebaseReady = true;
+    } catch (e) {
+      console.warn("Firebase接続に失敗しました。ローカル版として動作します。", e);
+      appState.firebaseReady = false;
+    }
+  }
+
+  function dbPath(path) {
+    return "rooms/" + ROOM_ID + "/" + path;
+  }
+
+  async function loadSettingsFromFirebase() {
+    var f = appState.firebaseFns;
+    var ref = f.ref(appState.db, dbPath("settings"));
+    var snap = await f.get(ref);
+    if (snap.exists()) {
+      appState.settings = normalizeSettings(snap.val());
+      saveLocalSettings(appState.settings);
+    } else {
+      appState.settings = normalizeSettings(appState.settings);
+      await f.set(ref, appState.settings);
+      saveLocalSettings(appState.settings);
+    }
+  }
+
+  async function saveSettingsToFirebase() {
+    if (!appState.firebaseReady) return;
+    var f = appState.firebaseFns;
+    await f.set(f.ref(appState.db, dbPath("settings")), appState.settings);
+  }
+
+  async function performFirebaseDailyResetIfNeeded() {
+    var s = appState.settings;
+    if (!s.autoDailyReset) return;
+    if (s.lastResetDate === todayKey()) return;
+    await resetAllAssignments("date");
+  }
+
+  function performLocalDailyResetIfNeeded() {
+    var s = appState.settings;
+    if (!s.autoDailyReset) return;
+    var lockDate = localStorage.getItem(LOCK_DATE_KEY);
+    if (lockDate && lockDate !== todayKey()) {
+      clearLocalDrawState();
+    }
+  }
+
+  function createGroups() {
+    var s = appState.settings;
+    if (s.mode === "fruit") return createFruitGroups(s);
+    return createNumberGroups(s);
+  }
+
+  function createNumberGroups(s) {
+    var total = s.totalStudents;
+    var groupSize = s.groupSize;
+    var groupCount = Math.ceil(total / groupSize);
+    var columns = Math.min(s.columnCount, groupCount);
+    var rows = Math.ceil(groupCount / columns);
+    var remainder = total % groupSize;
+    var groups = [];
+    var idx = 0;
+    for (var c = 0; c < columns; c++) {
+      var colLabel = columnLabel(c);
+      for (var r = 1; r <= rows; r++) {
+        if (idx >= groupCount) break;
+        var capacity = groupSize;
+        if (idx === groupCount - 1 && remainder !== 0) capacity = remainder;
+        groups.push({
+          id: colLabel + r,
+          label: colLabel + r,
+          type: "number",
+          col: colLabel,
+          row: r,
+          capacity: capacity,
+          detail: colLabel + "列・" + r + "番"
+        });
+        idx += 1;
+      }
+    }
+    return groups;
+  }
+
+  function createFruitGroups(s) {
+    var total = s.totalStudents;
+    var baseCapacity = Math.ceil(total / FRUITS.length);
+    return FRUITS.map(function (f, i) {
+      return {
+        id: f.id,
+        label: f.label,
+        emoji: f.emoji,
+        type: "fruit",
+        col: "",
+        row: i + 1,
+        capacity: baseCapacity,
+        detail: f.label + "グループ"
+      };
+    });
+  }
+
+  function columnLabel(index) {
+    var n = index;
+    var label = "";
+    do {
+      label = String.fromCharCode(65 + (n % 26)) + label;
+      n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    return label;
+  }
+
+  function renderAll() {
+    appState.settings = normalizeSettings(appState.settings);
+    appState.groups = createGroups();
+    renderHeader();
+    renderBadges();
+    renderMap();
+    renderAdminForm();
+  }
+
+  function renderHeader() {
+    var s = appState.settings;
+    var groupCount = appState.groups.length;
+    var maxNumber = s.mode === "number" ? Math.ceil(groupCount / Math.min(s.columnCount, groupCount || 1)) : "-";
+    els.modePill.textContent = s.mode === "number" ? "番号版" : "果物版";
+    els.planPill.textContent = s.mode === "number"
+      ? s.totalStudents + "人・" + s.groupSize + "人組・" + s.columnCount + "列・" + groupCount + "組"
+      : s.totalStudents + "人・果物" + groupCount + "種類";
+    if (appState.firebaseReady) {
+      els.syncPill.textContent = "全員共通管理";
+      els.syncPill.className = "pill ok";
+      els.metaText.innerHTML = "同じ番号・果物に割り当てられる人数を，全員共通で管理します。左上を5回タップすると教員用管理画面が開きます。";
+    } else {
+      els.syncPill.textContent = "ローカル版";
+      els.syncPill.className = "pill warn";
+      els.metaText.innerHTML = "Firebase未設定のため，抽選済み状態は端末ごとの保存です。厳密な4人組管理にはFirebase設定を入れてください。左上を5回タップすると教員用管理画面が開きます。";
+    }
+    els.leadText.textContent = s.mode === "number"
+      ? "抽選は1回だけ行えます。同じ番号の人どうしで集まってください。"
+      : "抽選は1回だけ行えます。同じ果物の人どうしで集まってください。";
+    els.mapNote.textContent = s.mode === "number"
+      ? "この例では，列はA，B，C…，番号は1，2，3…です。番号上限は人数と列数から自動計算されます。現在の番号上限は " + maxNumber + " です。"
+      : "果物版では配置図は簡易一覧として表示されます。4人組にしたい場合は番号版が適しています。";
+  }
+
+  function renderBadges() {
+    var html = appState.groups.map(function (g) {
+      var mark = g.type === "fruit" ? (g.emoji + " ") : "";
+      return '<span class="badge">' + escapeHtml(mark + g.label) + '</span>';
+    }).join("");
+    els.list.innerHTML = html;
+  }
+
+  function renderMap() {
+    var s = appState.settings;
+    if (s.mode === "fruit") {
+      var fruitRows = appState.groups.map(function (g) {
+        return '<tr><td class="groupCell">' + escapeHtml(g.emoji + " " + g.label) + '</td><td>' + escapeHtml("上限目安：" + g.capacity + "人") + '</td></tr>';
+      }).join("");
+      els.mapTableWrap.innerHTML = '<table><thead><tr><th>グループ</th><th>人数</th></tr></thead><tbody>' + fruitRows + '</tbody></table>';
+      return;
+    }
+
+    var columns = [];
+    appState.groups.forEach(function (g) {
+      if (columns.indexOf(g.col) === -1) columns.push(g.col);
+    });
+    var maxRow = appState.groups.reduce(function (m, g) { return Math.max(m, g.row); }, 0);
+    var byKey = {};
+    appState.groups.forEach(function (g) { byKey[g.col + "-" + g.row] = g; });
+
+    var thead = '<tr><th>番号</th>' + columns.map(function (c) { return '<th>' + escapeHtml(c + "列") + '</th>'; }).join("") + '</tr>';
+    var rows = "";
+    for (var r = 1; r <= maxRow; r++) {
+      rows += '<tr><th>' + r + '</th>';
+      columns.forEach(function (c) {
+        var g = byKey[c + "-" + r];
+        if (g) rows += '<td class="groupCell">' + escapeHtml(g.label) + '<br><small>' + escapeHtml("上限" + g.capacity + "人") + '</small></td>';
+        else rows += '<td class="empty">—</td>';
+      });
+      rows += '</tr>';
+    }
+    els.mapTableWrap.innerHTML = '<table><thead>' + thead + '</thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function renderAdminForm() {
+    var s = appState.settings;
+    els.modeSelect.value = s.mode;
+    els.totalStudentsInput.value = s.totalStudents;
+    els.groupSizeInput.value = s.groupSize;
+    els.columnCountInput.value = s.columnCount;
+    els.autoDailyResetInput.checked = s.autoDailyReset;
+  }
+
+  function showInitialResult() {
+    els.resultSymbol.className = "resultSymbol";
+    els.resultSymbol.textContent = "🎲";
+    els.resultName.textContent = "待機中";
+    els.resultSub.textContent = "抽選ボタンを押してください。";
+    setLockedUI(false);
+  }
+
+  function setLockedUI(isLocked) {
+    els.drawButton.disabled = isLocked;
+    els.drawButton.textContent = isLocked ? "抽選済み" : "抽選する";
+    els.status.textContent = isLocked ? "この端末では抽選済みです" : "まだ抽選していません";
+  }
+
+  function showResult(result) {
+    if (!result) {
+      showInitialResult();
+      return;
+    }
+    if (result.type === "fruit") {
+      els.resultSymbol.className = "resultSymbol fruit";
+      els.resultSymbol.textContent = result.emoji || "🍎";
+      els.resultName.textContent = result.label;
+      els.resultSub.innerHTML = escapeHtml(result.detail || (result.label + "グループ")) + '<br>同じ果物の人どうしで集まってください。';
+    } else {
+      els.resultSymbol.className = "resultSymbol";
+      els.resultSymbol.textContent = result.label;
+      els.resultName.textContent = result.detail || result.label;
+      els.resultSub.innerHTML = "同じ番号の人どうしで集まってください。<br>例：" + escapeHtml(result.label) + " の人は同じグループです。";
+    }
+    setLockedUI(true);
+  }
+
+  async function restoreState() {
+    if (appState.firebaseReady) {
+      var assignment = await getFirebaseAssignment();
+      if (assignment) {
+        showResult(assignment);
+        saveLocalResult(assignment);
+        return;
+      }
+      clearLocalDrawState();
+      showInitialResult();
+      return;
+    }
+
+    var locked = localStorage.getItem(LOCK_KEY) === "1";
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(RESULT_KEY) || "null"); } catch (e) {}
+    if (locked && saved) showResult(saved);
+    else showInitialResult();
+  }
+
+  async function draw() {
+    if (!appState.firebaseReady && localStorage.getItem(LOCK_KEY) === "1") return;
+    els.drawButton.disabled = true;
+    els.drawButton.textContent = "抽選中…";
+
+    try {
+      if (appState.firebaseReady) {
+        var existing = await getFirebaseAssignment();
+        if (existing) {
+          showResult(existing);
+          return;
+        }
+        var result = await drawWithFirebaseCapacity();
+        if (!result) {
+          alert("すべてのグループが上限に達しています。教員用管理画面で全員分をリセットしてください。");
+          showInitialResult();
+          return;
+        }
+        await setFirebaseAssignment(result);
+        saveLocalResult(result);
+        showResult(result);
+      } else {
+        var localResult = pickRandom(appState.groups);
+        saveLocalResult(localResult);
+        showResult(localResult);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("抽選中にエラーが発生しました。通信状況を確認してください。ローカル版として再読み込みすると動く場合があります。");
+      var saved = null;
+      try { saved = JSON.parse(localStorage.getItem(RESULT_KEY) || "null"); } catch (err) {}
+      if (saved) showResult(saved); else showInitialResult();
+    }
+  }
+
+  function pickRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  function shuffled(arr) {
+    var copy = arr.slice();
+    for (var i = copy.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = copy[i];
+      copy[i] = copy[j];
+      copy[j] = tmp;
+    }
+    return copy;
+  }
+
+  async function drawWithFirebaseCapacity() {
+    var f = appState.firebaseFns;
+    var candidates = shuffled(appState.groups);
+    for (var i = 0; i < candidates.length; i++) {
+      var g = candidates[i];
+      var countRef = f.ref(appState.db, dbPath("groupCounts/" + safeKey(g.id)));
+      var tx = await f.runTransaction(countRef, function (current) {
+        var now = current || 0;
+        if (now >= g.capacity) return;
+        return now + 1;
+      });
+      if (tx.committed) {
+        return g;
+      }
+    }
+    return null;
+  }
+
+  async function getFirebaseAssignment() {
+    var f = appState.firebaseFns;
+    var snap = await f.get(f.ref(appState.db, dbPath("assignments/" + getDeviceId())));
+    if (!snap.exists()) return null;
+    var value = snap.val();
+    if (value && value.sessionId === appState.settings.sessionId) return value.result;
+    return null;
+  }
+
+  async function setFirebaseAssignment(result) {
+    var f = appState.firebaseFns;
+    await f.set(f.ref(appState.db, dbPath("assignments/" + getDeviceId())), {
+      result: result,
+      sessionId: appState.settings.sessionId,
+      date: todayKey(),
+      createdAt: Date.now()
+    });
+  }
+
+  function saveLocalResult(result) {
+    localStorage.setItem(LOCK_KEY, "1");
+    localStorage.setItem(RESULT_KEY, JSON.stringify(result));
+    localStorage.setItem(LOCK_DATE_KEY, todayKey());
+  }
+
+  function clearLocalDrawState() {
+    localStorage.removeItem(LOCK_KEY);
+    localStorage.removeItem(RESULT_KEY);
+    localStorage.removeItem(LOCK_DATE_KEY);
+  }
+
+  function verifyAdminCode() {
+    if (els.adminCode.value.trim() !== appState.settings.resetCode) {
+      alert("管理コードが違います。");
+      return false;
+    }
+    return true;
+  }
+
+  async function saveSettingsFromAdmin() {
+    if (!verifyAdminCode()) return;
+    var oldMode = appState.settings.mode;
+    var oldTotal = appState.settings.totalStudents;
+    var oldSize = appState.settings.groupSize;
+    var oldColumns = appState.settings.columnCount;
+    appState.settings.mode = els.modeSelect.value;
+    appState.settings.totalStudents = clampInt(els.totalStudentsInput.value, 1, 600, 80);
+    appState.settings.groupSize = clampInt(els.groupSizeInput.value, 1, 20, 4);
+    appState.settings.columnCount = clampInt(els.columnCountInput.value, 1, 12, 4);
+    appState.settings.autoDailyReset = !!els.autoDailyResetInput.checked;
+    appState.settings = normalizeSettings(appState.settings);
+
+    var layoutChanged = oldMode !== appState.settings.mode || oldTotal !== appState.settings.totalStudents || oldSize !== appState.settings.groupSize || oldColumns !== appState.settings.columnCount;
+    if (layoutChanged) {
+      appState.settings.sessionId = String(Date.now());
+      clearLocalDrawState();
+      if (appState.firebaseReady) await resetAllAssignments("settings");
+    }
+    saveLocalSettings(appState.settings);
+    if (appState.firebaseReady) await saveSettingsToFirebase();
+    renderAll();
+    await restoreState();
+    alert(layoutChanged ? "設定を保存し，抽選状況をリセットしました。" : "設定を保存しました。");
+  }
+
+  async function resetThisDeviceFromAdmin() {
+    if (!verifyAdminCode()) return;
+    clearLocalDrawState();
+    if (appState.firebaseReady) {
+      var f = appState.firebaseFns;
+      var assignment = await getFirebaseAssignment();
+      if (assignment) {
+        var countRef = f.ref(appState.db, dbPath("groupCounts/" + safeKey(assignment.id)));
+        await f.runTransaction(countRef, function (current) {
+          var now = current || 0;
+          return Math.max(0, now - 1);
+        });
+      }
+      await f.remove(f.ref(appState.db, dbPath("assignments/" + getDeviceId())));
+    }
+    showInitialResult();
+    alert("この端末の抽選状態をリセットしました。");
+  }
+
+  async function resetAllFromAdmin() {
+    if (!verifyAdminCode()) return;
+    var ok = confirm("全員分の抽選状況をリセットします。よろしいですか？");
+    if (!ok) return;
+    await resetAllAssignments("manual");
+    clearLocalDrawState();
+    renderAll();
+    showInitialResult();
+    alert(appState.firebaseReady ? "全員分の抽選状況をリセットしました。" : "この端末の抽選状態をリセットしました。Firebase未設定のため，他の端末はリセットされません。");
+  }
+
+  async function resetAllAssignments(reason) {
+    appState.settings.lastResetDate = todayKey();
+    appState.settings.sessionId = String(Date.now());
+    saveLocalSettings(appState.settings);
+    if (!appState.firebaseReady) {
+      clearLocalDrawState();
+      return;
+    }
+    var f = appState.firebaseFns;
+    await f.remove(f.ref(appState.db, dbPath("assignments")));
+    await f.remove(f.ref(appState.db, dbPath("groupCounts")));
+    await f.set(f.ref(appState.db, dbPath("settings")), appState.settings);
+  }
+
+  async function toggleCounts() {
+    appState.countsVisible = !appState.countsVisible;
+    els.countsPanel.classList.toggle("show", appState.countsVisible);
+    els.countsButton.textContent = appState.countsVisible ? "抽選状況を隠す" : "抽選状況を表示";
+    if (appState.countsVisible) await renderCounts();
+  }
+
+  async function renderCounts() {
+    var counts = {};
+    if (appState.firebaseReady) {
+      var f = appState.firebaseFns;
+      var snap = await f.get(f.ref(appState.db, dbPath("groupCounts")));
+      if (snap.exists()) counts = snap.val() || {};
+    } else {
+      var saved = null;
+      try { saved = JSON.parse(localStorage.getItem(RESULT_KEY) || "null"); } catch (e) {}
+      if (saved) counts[safeKey(saved.id)] = 1;
+    }
+    els.countsGrid.innerHTML = appState.groups.map(function (g) {
+      var n = counts[safeKey(g.id)] || 0;
+      return '<div class="countItem"><strong>' + escapeHtml(g.type === "fruit" ? ((g.emoji || "") + " " + g.label) : g.label) + '</strong>' + n + ' / ' + g.capacity + '人</div>';
+    }).join("");
+  }
+
+  function safeKey(value) {
+    return String(value).replace(/[.#$\[\]/]/g, "_");
+  }
+
+  function ensureDeviceId() {
+    if (!localStorage.getItem(DEVICE_ID_KEY)) {
+      var id = "d-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 11);
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+  }
+
+  function getDeviceId() {
+    ensureDeviceId();
+    return localStorage.getItem(DEVICE_ID_KEY);
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+})();
+</script>
+</body>
+</html>
