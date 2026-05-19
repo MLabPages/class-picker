@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>グループ抽選（番号・配置図対応）</title>
+<title>グループ抽選（番号・配置図対応・分散人数版）</title>
 <style>
   :root {
     --bg: #f6f8fb;
@@ -344,7 +344,7 @@
     <div class="adminGrid">
       <div class="field">
         <label for="adminCode">管理コード</label>
-        <input id="adminCode" type="password">
+        <input id="adminCode" type="password" placeholder="初期値：reset2026">
       </div>
       <div class="field">
         <label for="modeSelect">表示方式</label>
@@ -358,7 +358,7 @@
         <input id="totalStudentsInput" type="number" min="1" max="600" step="1">
       </div>
       <div class="field">
-        <label for="groupSizeInput">1グループ人数</label>
+        <label for="groupSizeInput">1グループの最大人数</label>
         <input id="groupSizeInput" type="number" min="1" max="20" step="1">
       </div>
       <div class="field">
@@ -376,8 +376,8 @@
 
     <div class="noteBox">
       <strong>使い分け：</strong><br>
-      Firebase設定が入っている場合は，全員共通で残数を管理し，A1が4人に達したらそれ以上割り当てません。<br>
-      Firebase未設定の場合もページ自体は動きますが，残数管理は端末ごとになります。授業本番で厳密に4人ずつにする場合はFirebase設定版を使ってください。
+      Firebase設定が入っている場合は，全員共通で残数を管理し，A1などが上限人数に達したらそれ以上割り当てません。<br>
+      Firebase未設定の場合もページ自体は動きますが，残数管理は端末ごとになります。授業本番で厳密に上限人数どおりに分ける場合はFirebase設定版を使ってください。
     </div>
 
     <div class="adminActions">
@@ -401,13 +401,13 @@
   // 未設定のままでも，端末ごとのローカル抽選として動きます。
   // ==============================
   var FIREBASE_CONFIG = {
-    apiKey: "AIzaSyBSMHW6zAJCsGbxP1FIzwhbYXGZitUxFMg",
-    authDomain: "class-group-picker.firebaseapp.com",
-    databaseURL: "https://class-group-picker-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "class-group-picker",
-    storageBucket: "class-group-picker.firebasestorage.app",
-    messagingSenderId: "756663742740",
-    appId: "1:756663742740:web:fae503b097b9c814475201"
+    apiKey: "",
+    authDomain: "",
+    databaseURL: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: ""
   };
   var ROOM_ID = "default-class"; // クラスごとに変えると，抽選状況を分けられます。
 
@@ -642,15 +642,14 @@
     var groupCount = Math.ceil(total / groupSize);
     var columns = Math.min(s.columnCount, groupCount);
     var rows = Math.ceil(groupCount / columns);
-    var remainder = total % groupSize;
+    var capacities = balancedCapacities(total, groupSize, groupCount);
     var groups = [];
     var idx = 0;
     for (var c = 0; c < columns; c++) {
       var colLabel = columnLabel(c);
       for (var r = 1; r <= rows; r++) {
         if (idx >= groupCount) break;
-        var capacity = groupSize;
-        if (idx === groupCount - 1 && remainder !== 0) capacity = remainder;
+        var capacity = capacities[idx];
         groups.push({
           id: colLabel + r,
           label: colLabel + r,
@@ -664,6 +663,19 @@
       }
     }
     return groups;
+  }
+
+  function balancedCapacities(total, groupSize, groupCount) {
+    // 余りを最後の1グループに寄せず，できるだけ均等に分散する。
+    // 例：18人・最大4人組 → 4,4,4,3,3。
+    var base = Math.floor(total / groupCount);
+    var extra = total % groupCount;
+    var caps = [];
+    for (var i = 0; i < groupCount; i++) {
+      caps.push(base + (i < extra ? 1 : 0));
+    }
+    // 念のため，設定された最大人数を超えないようにする。
+    return caps.map(function (n) { return Math.min(n, groupSize); });
   }
 
   function createFruitGroups(s) {
@@ -708,7 +720,7 @@
     var maxNumber = s.mode === "number" ? Math.ceil(groupCount / Math.min(s.columnCount, groupCount || 1)) : "-";
     els.modePill.textContent = s.mode === "number" ? "番号版" : "果物版";
     els.planPill.textContent = s.mode === "number"
-      ? s.totalStudents + "人・" + s.groupSize + "人組・" + s.columnCount + "列・" + groupCount + "組"
+      ? s.totalStudents + "人・最大" + s.groupSize + "人組・" + s.columnCount + "列・" + groupCount + "組"
       : s.totalStudents + "人・果物" + groupCount + "種類";
     if (appState.firebaseReady) {
       els.syncPill.textContent = "全員共通管理";
@@ -723,7 +735,7 @@
       ? "抽選は1回だけ行えます。同じ番号の人どうしで集まってください。"
       : "抽選は1回だけ行えます。同じ果物の人どうしで集まってください。";
     els.mapNote.textContent = s.mode === "number"
-      ? "この例では，列はA，B，C…，番号は1，2，3…です。番号上限は人数と列数から自動計算されます。現在の番号上限は " + maxNumber + " です。"
+      ? "この例では，列はA，B，C…，番号は1，2，3…です。人数が割り切れない場合は，最後の1組だけが極端に少なくならないよう，上限人数を複数グループに分散します。現在の番号上限は " + maxNumber + " です。"
       : "果物版では配置図は簡易一覧として表示されます。4人組にしたい場合は番号版が適しています。";
   }
 
