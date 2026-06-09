@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>グループ抽選（番号・配置図対応・分散人数版）</title>
+<title>グループ抽選（番号・配置図・行数上限・参加コード・男女均等対応版）</title>
 <style>
   :root {
     --bg: #f6f8fb;
@@ -66,6 +66,58 @@
   }
   .pill.ok { color: #166534; background: #ecfdf5; border-color: #bbf7d0; }
   .pill.warn { color: #9a3412; background: #fff7ed; border-color: #fed7aa; }
+  .roomBox {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 8px auto 16px;
+    padding: 11px 12px;
+    max-width: 760px;
+    border-radius: 18px;
+    background: rgba(255,255,255,.86);
+    border: 1px solid rgba(148,163,184,.35);
+  }
+  .roomBox label { font-size: 13px; font-weight: 900; color: #475569; }
+  .roomBox input {
+    width: min(230px, 72vw);
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 10px 13px;
+    font-size: 16px;
+    background: white;
+  }
+  .roomHelp { width: 100%; color: var(--muted); font-size: 12px; line-height: 1.55; }
+  .buttonRow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .buttonRow select { flex: 0 0 auto; min-width: 120px; }
+  .shareUrl {
+    margin-top: 8px;
+    padding: 9px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.55;
+    word-break: break-all;
+  }
+  .genderPanel {
+    display: none;
+    margin: 16px auto 0;
+    padding: 16px;
+    max-width: 760px;
+    text-align: left;
+    background: #fff;
+    border: 1px solid #bfdbfe;
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+  }
+  .genderPanel.show { display: block; }
+  .genderPanel h2 { margin: 0 0 8px; font-size: 18px; text-align: center; }
+  .genderPanel p { margin: 8px 0; color: #475569; line-height: 1.75; font-size: 14px; }
+  .genderChoices { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  .hidden { display: none !important; }
   .card {
     background: rgba(255,255,255,.95);
     border: 1px solid rgba(255,255,255,.7);
@@ -294,10 +346,12 @@
     position: fixed;
     top: 0;
     left: 0;
-    width: 62px;
-    height: 62px;
+    width: 84px;
+    height: 84px;
     z-index: 9999;
     background: transparent;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
   code { background: #f1f5f9; padding: 2px 5px; border-radius: 6px; }
 </style>
@@ -311,8 +365,16 @@
 
   <div class="topbar">
     <span class="pill" id="modePill">番号版</span>
-    <span class="pill" id="planPill">80人・4人組・4列</span>
+    <span class="pill" id="planPill">80人・基準4人組・4列</span>
+    <span class="pill" id="roomPill">ルーム: default-class</span>
     <span class="pill warn" id="syncPill">ローカル版</span>
+  </div>
+
+  <div class="roomBox">
+    <label for="roomInput">参加コード</label>
+    <input id="roomInput" type="text" inputmode="numeric" autocomplete="off" placeholder="例：42871963">
+    <button id="applyRoomButton" class="secondary smallBtn" type="button">このコードで入る</button>
+    <div class="roomHelp" id="roomHelp">同じ参加コードを入力した参加者だけが，同じクラスとして抽選されます。</div>
   </div>
 
   <section class="card" aria-live="polite">
@@ -326,6 +388,25 @@
     <button id="drawButton" class="primary" type="button">抽選する</button>
     <button id="mapButton" class="secondary" type="button">配置図を表示</button>
   </div>
+
+  <section class="genderPanel" id="genderPanel">
+    <h2>性別情報の利用について</h2>
+    <div id="genderConsentStep">
+      <p>男女均等モードがオンのため，グループ内の人数をできるだけ男性2名・女性2名に近づける目的で，性別を選択してから抽選します。</p>
+      <p>この情報はグループ分けのためだけに使用し，氏名とは結び付けません。Firebase利用時は現在のルーム内に一時保存され，教員用管理画面のリセットで削除されます。</p>
+      <div class="genderChoices">
+        <button id="agreeGenderButton" class="primary smallBtn" type="button">同意して選択へ</button>
+        <button id="cancelGenderButton" class="secondary smallBtn" type="button">戻る</button>
+      </div>
+    </div>
+    <div id="genderChoiceStep" class="hidden">
+      <p>抽選に使う区分を選んでください。</p>
+      <div class="genderChoices">
+        <button id="maleButton" class="secondary" type="button">男性</button>
+        <button id="femaleButton" class="secondary" type="button">女性</button>
+      </div>
+    </div>
+  </section>
 
   <div class="meta" id="metaText">
     左上を5回タップすると，教員用管理画面が開きます。
@@ -344,7 +425,7 @@
     <div class="adminGrid">
       <div class="field">
         <label for="adminCode">管理コード</label>
-        <input id="adminCode" type="password" >
+        <input id="adminCode" type="password">
       </div>
       <div class="field">
         <label for="modeSelect">表示方式</label>
@@ -358,12 +439,20 @@
         <input id="totalStudentsInput" type="number" min="1" max="600" step="1">
       </div>
       <div class="field">
-        <label for="groupSizeInput">1グループの最大人数</label>
+        <label for="groupSizeInput">1グループの基準人数（通常4人）</label>
         <input id="groupSizeInput" type="number" min="1" max="20" step="1">
       </div>
       <div class="field">
         <label for="columnCountInput">列数</label>
         <input id="columnCountInput" type="number" min="1" max="12" step="1">
+      </div>
+      <div class="field">
+        <label for="rowLimitInput">1列あたりのグループ数上限（任意）</label>
+        <input id="rowLimitInput" type="number" min="0" max="30" step="1" placeholder="例：5。空欄なら自動">
+      </div>
+      <div class="field">
+        <label for="columnLimitsInput">列別のグループ数上限（任意）</label>
+        <textarea id="columnLimitsInput" placeholder="例：5,5,5,6,6&#10;A〜E列の上限を順に指定。空欄なら上の行数上限を全列に適用。"></textarea>
       </div>
       <div class="field">
         <label>日付変更時の自動リセット</label>
@@ -372,12 +461,34 @@
           <span>オンにする</span>
         </div>
       </div>
+      <div class="field">
+        <label>男女均等モード</label>
+        <div class="checkRow">
+          <input id="genderBalanceInput" type="checkbox">
+          <span>オンにする（4人組は原則 男性2・女性2）</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="codeDigitsSelect">参加コード作成</label>
+        <div class="buttonRow">
+          <select id="codeDigitsSelect">
+            <option value="6">6桁</option>
+            <option value="8" selected>8桁</option>
+          </select>
+          <button id="generateRoomCodeButton" class="secondary smallBtn" type="button">コードを作成して切替</button>
+          <button id="copyRoomUrlButton" class="secondary smallBtn" type="button">共有URLをコピー</button>
+        </div>
+        <div class="shareUrl" id="shareUrlText">現在の参加コードから共有URLを作成します。</div>
+      </div>
     </div>
 
     <div class="noteBox">
       <strong>使い分け：</strong><br>
       Firebase設定が入っている場合は，全員共通で残数を管理し，A1などが上限人数に達したらそれ以上割り当てません。<br>
-      Firebase未設定の場合もページ自体は動きますが，残数管理は端末ごとになります。授業本番で厳密に上限人数どおりに分ける場合はFirebase設定版を使ってください。
+      行数上限を入れると，A1〜A5のように縦方向の番号上限を抑えられます。105人・4人基準・5列・各列5グループの場合は25グループに収めるため，一部5人組になります。<br>
+      男女均等モードをオンにすると，参加者は同意後に男性・女性を選んでから抽選します。4人組では原則2名ずつの枠を優先しますが，実際の男女比に偏りがある場合は，空き枠を使って割り当てます。<br>
+      参加コードを使うと，複数クラスを同時に分けて運用できます。同じ参加コードの参加者だけが同じ抽選データを共有します。8桁コードにすると番号被りの可能性をかなり下げられます。<br>
+      Firebase未設定の場合もページ自体は動きますが，残数管理は端末ごとになります。授業本番で厳密に人数管理する場合はFirebase設定版を使ってください。
     </div>
 
     <div class="adminActions">
@@ -397,8 +508,8 @@
 <script>
 (function () {
   // ==============================
-  // Firebaseを使う場合だけ，以下を自分のFirebase設定に置き換えてください。
-  // 未設定のままでも，端末ごとのローカル抽選として動きます。
+  // Firebase設定済み。必要に応じて別プロジェクトの設定に置き換えてください。
+  // databaseURLが入っている場合は，複数端末で抽選状況を共有します。
   // ==============================
   var FIREBASE_CONFIG = {
     apiKey: "AIzaSyBSMHW6zAJCsGbxP1FIzwhbYXGZitUxFMg",
@@ -409,14 +520,19 @@
     messagingSenderId: "756663742740",
     appId: "1:756663742740:web:fae503b097b9c814475201"
   };
-  var ROOM_ID = "default-class"; // クラスごとに変えると，抽選状況を分けられます。
+  var DEFAULT_ROOM_ID = "00000000";
+  var ROOM_STORAGE_KEY = "group_picker_room_id_v1";
+  var ROOM_ID = getInitialRoomId(); // 参加コードごとに，設定・抽選状況・リセットを分けます。
 
   var DEFAULT_SETTINGS = {
     mode: "number",
     totalStudents: 80,
     groupSize: 4,
     columnCount: 4,
+    rowLimitPerColumn: 0,
+    columnRowLimits: "",
     autoDailyReset: false,
+    genderBalance: false,
     resetCode: "reset2026",
     lastResetDate: todayKey(),
     sessionId: "session-1"
@@ -433,11 +549,12 @@
     { id: "pineapple", label: "パイナップル", emoji: "🍍" }
   ];
 
-  var SETTINGS_KEY = "group_picker_settings_v1";
+  var SETTINGS_KEY = "group_picker_settings_v2";
   var LOCK_KEY = "group_picker_locked_v1";
   var RESULT_KEY = "group_picker_result_v1";
   var LOCK_DATE_KEY = "group_picker_locked_date_v1";
   var DEVICE_ID_KEY = "group_picker_device_id_v1";
+  var GENDER_KEY_PREFIX = "group_picker_gender_v1_";
 
   var appState = {
     settings: loadLocalSettings(),
@@ -453,7 +570,11 @@
     leadText: document.getElementById("leadText"),
     modePill: document.getElementById("modePill"),
     planPill: document.getElementById("planPill"),
+    roomPill: document.getElementById("roomPill"),
     syncPill: document.getElementById("syncPill"),
+    roomInput: document.getElementById("roomInput"),
+    applyRoomButton: document.getElementById("applyRoomButton"),
+    roomHelp: document.getElementById("roomHelp"),
     resultSymbol: document.getElementById("resultSymbol"),
     resultName: document.getElementById("resultName"),
     resultSub: document.getElementById("resultSub"),
@@ -472,7 +593,21 @@
     totalStudentsInput: document.getElementById("totalStudentsInput"),
     groupSizeInput: document.getElementById("groupSizeInput"),
     columnCountInput: document.getElementById("columnCountInput"),
+    rowLimitInput: document.getElementById("rowLimitInput"),
+    columnLimitsInput: document.getElementById("columnLimitsInput"),
     autoDailyResetInput: document.getElementById("autoDailyResetInput"),
+    genderBalanceInput: document.getElementById("genderBalanceInput"),
+    codeDigitsSelect: document.getElementById("codeDigitsSelect"),
+    generateRoomCodeButton: document.getElementById("generateRoomCodeButton"),
+    copyRoomUrlButton: document.getElementById("copyRoomUrlButton"),
+    shareUrlText: document.getElementById("shareUrlText"),
+    genderPanel: document.getElementById("genderPanel"),
+    genderConsentStep: document.getElementById("genderConsentStep"),
+    genderChoiceStep: document.getElementById("genderChoiceStep"),
+    agreeGenderButton: document.getElementById("agreeGenderButton"),
+    cancelGenderButton: document.getElementById("cancelGenderButton"),
+    maleButton: document.getElementById("maleButton"),
+    femaleButton: document.getElementById("femaleButton"),
     saveSettingsButton: document.getElementById("saveSettingsButton"),
     resetDeviceButton: document.getElementById("resetDeviceButton"),
     resetAllButton: document.getElementById("resetAllButton"),
@@ -486,16 +621,27 @@
   async function init() {
     ensureDeviceId();
     renderAll();
+    bindEvents();
     await setupFirebaseIfPossible();
     if (appState.firebaseReady) {
-      await loadSettingsFromFirebase();
-      await performFirebaseDailyResetIfNeeded();
+      try {
+        await loadSettingsFromFirebase();
+        await performFirebaseDailyResetIfNeeded();
+      } catch (e) {
+        console.warn("Firebaseの読み書きに失敗しました。Realtime Databaseのルールを確認してください。ローカル版として動作します。", e);
+        appState.firebaseReady = false;
+        performLocalDailyResetIfNeeded();
+      }
     } else {
       performLocalDailyResetIfNeeded();
     }
     renderAll();
-    await restoreState();
-    bindEvents();
+    try {
+      await restoreState();
+    } catch (e) {
+      console.warn("抽選状態の復元に失敗しました。初期状態で表示します。", e);
+      showInitialResult();
+    }
   }
 
   function bindEvents() {
@@ -504,12 +650,24 @@
       els.mapPanel.classList.toggle("show");
       els.mapButton.textContent = els.mapPanel.classList.contains("show") ? "配置図を隠す" : "配置図を表示";
     });
+    els.applyRoomButton.addEventListener("click", applyRoomFromInput);
+    els.roomInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") applyRoomFromInput();
+    });
+    els.agreeGenderButton.addEventListener("click", function () {
+      els.genderConsentStep.classList.add("hidden");
+      els.genderChoiceStep.classList.remove("hidden");
+    });
+    els.cancelGenderButton.addEventListener("click", hideGenderPanel);
+    els.maleButton.addEventListener("click", function () { chooseGenderAndDraw("male"); });
+    els.femaleButton.addEventListener("click", function () { chooseGenderAndDraw("female"); });
 
     var tapCount = 0;
     var firstTapTime = 0;
-    els.hotspot.addEventListener("click", function () {
+    function handleAdminTap(e) {
+      if (e && e.cancelable) e.preventDefault();
       var now = Date.now();
-      if (!firstTapTime || now - firstTapTime > 2500) {
+      if (!firstTapTime || now - firstTapTime > 3000) {
         firstTapTime = now;
         tapCount = 1;
       } else {
@@ -520,8 +678,16 @@
         tapCount = 0;
         firstTapTime = 0;
       }
-    });
+    }
+    if (window.PointerEvent) {
+      els.hotspot.addEventListener("pointerdown", handleAdminTap);
+    } else {
+      els.hotspot.addEventListener("click", handleAdminTap);
+      els.hotspot.addEventListener("touchend", handleAdminTap);
+    }
 
+    els.generateRoomCodeButton.addEventListener("click", generateAndApplyRoomCode);
+    els.copyRoomUrlButton.addEventListener("click", copyRoomShareUrl);
     els.saveSettingsButton.addEventListener("click", saveSettingsFromAdmin);
     els.resetDeviceButton.addEventListener("click", resetThisDeviceFromAdmin);
     els.resetAllButton.addEventListener("click", resetAllFromAdmin);
@@ -534,6 +700,99 @@
     var m = String(d.getMonth() + 1).padStart(2, "0");
     var day = String(d.getDate()).padStart(2, "0");
     return y + "-" + m + "-" + day;
+  }
+
+  function getInitialRoomId() {
+    var fromUrl = "";
+    try {
+      var params = new URLSearchParams(window.location.search);
+      fromUrl = params.get("room") || params.get("code") || "";
+    } catch (e) {}
+    var saved = "";
+    try { saved = localStorage.getItem(ROOM_STORAGE_KEY) || ""; } catch (e) {}
+    var room = normalizeRoomId(fromUrl || saved || DEFAULT_ROOM_ID);
+    try { localStorage.setItem(ROOM_STORAGE_KEY, room); } catch (e) {}
+    return room;
+  }
+
+  function normalizeRoomId(value) {
+    var raw = String(value || "").trim();
+    if (!raw) raw = DEFAULT_ROOM_ID;
+    raw = raw.replace(/[.#$\/\[\]]/g, "-").replace(/\s+/g, "-");
+    return raw.slice(0, 64) || DEFAULT_ROOM_ID;
+  }
+
+  async function applyRoomFromInput() {
+    var nextRoom = normalizeRoomId(els.roomInput.value);
+    if (nextRoom === ROOM_ID) {
+      alert("すでにこの参加コードに入っています。");
+      return;
+    }
+    ROOM_ID = nextRoom;
+    localStorage.setItem(ROOM_STORAGE_KEY, ROOM_ID);
+    clearLocalDrawState();
+    hideGenderPanel();
+    if (appState.firebaseReady) {
+      await loadSettingsFromFirebase();
+      await performFirebaseDailyResetIfNeeded();
+    }
+    renderAll();
+    await restoreState();
+    alert("参加コード「" + ROOM_ID + "」に切り替えました。");
+  }
+
+  async function generateAndApplyRoomCode() {
+    if (!verifyAdminCode()) return;
+    var digits = clampInt(els.codeDigitsSelect.value, 6, 8, 8);
+    var nextCode = generateRoomCode(digits);
+    var guard = 0;
+    while (nextCode === ROOM_ID && guard < 5) {
+      nextCode = generateRoomCode(digits);
+      guard += 1;
+    }
+    els.roomInput.value = nextCode;
+    await applyRoomFromInput();
+    updateShareUrlText();
+  }
+
+  function generateRoomCode(digits) {
+    var max = Math.pow(10, digits);
+    var n;
+    if (window.crypto && window.crypto.getRandomValues) {
+      var arr = new Uint32Array(1);
+      window.crypto.getRandomValues(arr);
+      n = arr[0] % max;
+    } else {
+      n = Math.floor(Math.random() * max);
+    }
+    return String(n).padStart(digits, "0");
+  }
+
+  async function copyRoomShareUrl() {
+    if (!verifyAdminCode()) return;
+    var url = buildRoomShareUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      alert("共有URLをコピーしました。学生にはこのURLを伝えてください。\n" + url);
+    } catch (e) {
+      window.prompt("このURLをコピーして学生に共有してください。", url);
+    }
+  }
+
+  function buildRoomShareUrl() {
+    try {
+      var url = new URL(window.location.href);
+      url.searchParams.set("room", ROOM_ID);
+      return url.toString();
+    } catch (e) {
+      var base = String(window.location.href).split("?")[0];
+      return base + "?room=" + encodeURIComponent(ROOM_ID);
+    }
+  }
+
+  function updateShareUrlText() {
+    if (!els.shareUrlText) return;
+    els.shareUrlText.textContent = "現在の参加コード：" + ROOM_ID + "　共有URL：" + buildRoomShareUrl();
   }
 
   function loadLocalSettings() {
@@ -555,7 +814,10 @@
     out.totalStudents = clampInt(out.totalStudents, 1, 600, 80);
     out.groupSize = clampInt(out.groupSize, 1, 20, 4);
     out.columnCount = clampInt(out.columnCount, 1, 12, 4);
+    out.rowLimitPerColumn = clampOptionalInt(out.rowLimitPerColumn, 0, 30);
+    out.columnRowLimits = typeof out.columnRowLimits === "string" ? out.columnRowLimits : "";
     out.autoDailyReset = !!out.autoDailyReset;
+    out.genderBalance = !!out.genderBalance;
     out.resetCode = out.resetCode || "reset2026";
     out.lastResetDate = out.lastResetDate || todayKey();
     out.sessionId = out.sessionId || String(Date.now());
@@ -565,6 +827,13 @@
   function clampInt(value, min, max, fallback) {
     var n = parseInt(value, 10);
     if (!Number.isFinite(n)) n = fallback;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function clampOptionalInt(value, min, max) {
+    if (value === "" || value === null || typeof value === "undefined") return 0;
+    var n = parseInt(value, 10);
+    if (!Number.isFinite(n)) return 0;
     return Math.max(min, Math.min(max, n));
   }
 
@@ -639,43 +908,87 @@
   function createNumberGroups(s) {
     var total = s.totalStudents;
     var groupSize = s.groupSize;
-    var groupCount = Math.ceil(total / groupSize);
-    var columns = Math.min(s.columnCount, groupCount);
-    var rows = Math.ceil(groupCount / columns);
-    var capacities = balancedCapacities(total, groupSize, groupCount);
+    var neededGroupCount = Math.ceil(total / groupSize);
+    var columns = Math.min(s.columnCount, neededGroupCount);
+    var columnLimits = buildColumnLimits(s, columns, neededGroupCount);
+    var maxSlots = columnLimits.reduce(function (sum, n) { return sum + n; }, 0);
+    var hasLimits = hasRowLimitSettings(s);
+    var groupCount = neededGroupCount;
+
+    // 行数上限を設定していて，必要な組数を置ききれない場合は，
+    // 教室内の配置上限を優先し，その枠数の中で人数を均等配分する。
+    // 例：105人・4人基準・5列・各列5グループ → 25組，5人組が一部発生。
+    if (hasLimits && maxSlots > 0 && maxSlots < neededGroupCount) {
+      groupCount = maxSlots;
+    }
+
+    var capacities = balancedCapacities(total, groupSize, groupCount, hasLimits && maxSlots < neededGroupCount);
+    var slots = buildSlots(columns, columnLimits, groupCount);
     var groups = [];
-    var idx = 0;
-    for (var c = 0; c < columns; c++) {
-      var colLabel = columnLabel(c);
-      for (var r = 1; r <= rows; r++) {
-        if (idx >= groupCount) break;
-        var capacity = capacities[idx];
-        groups.push({
-          id: colLabel + r,
-          label: colLabel + r,
-          type: "number",
-          col: colLabel,
-          row: r,
-          capacity: capacity,
-          detail: colLabel + "列・" + r + "番"
-        });
-        idx += 1;
-      }
+
+    for (var i = 0; i < groupCount; i++) {
+      var slot = slots[i] || { col: columnLabel(i % columns), row: Math.floor(i / columns) + 1 };
+      var label = slot.col + slot.row;
+      groups.push({
+        id: label,
+        label: label,
+        type: "number",
+        col: slot.col,
+        row: slot.row,
+        capacity: capacities[i],
+        detail: slot.col + "列・" + slot.row + "番"
+      });
     }
     return groups;
   }
 
-  function balancedCapacities(total, groupSize, groupCount) {
+  function hasRowLimitSettings(s) {
+    return !!(s.rowLimitPerColumn || String(s.columnRowLimits || "").trim());
+  }
+
+  function parseColumnRowLimits(text, columns) {
+    var raw = String(text || "").trim();
+    if (!raw) return [];
+    return raw.split(/[,，\s]+/).map(function (part) {
+      return clampOptionalInt(part, 0, 30);
+    }).filter(function (n) { return n > 0; }).slice(0, columns);
+  }
+
+  function buildColumnLimits(s, columns, neededGroupCount) {
+    var specified = parseColumnRowLimits(s.columnRowLimits, columns);
+    var fallbackRows = s.rowLimitPerColumn || Math.ceil(neededGroupCount / columns);
+    var limits = [];
+    for (var c = 0; c < columns; c++) {
+      limits.push(specified[c] || fallbackRows);
+    }
+    return limits.map(function (n) { return clampInt(n, 1, 30, 1); });
+  }
+
+  function buildSlots(columns, columnLimits, groupCount) {
+    var maxRow = columnLimits.reduce(function (m, n) { return Math.max(m, n); }, 0);
+    var slots = [];
+    for (var r = 1; r <= maxRow; r++) {
+      for (var c = 0; c < columns; c++) {
+        if (r <= columnLimits[c]) {
+          slots.push({ col: columnLabel(c), row: r });
+          if (slots.length >= groupCount) return slots;
+        }
+      }
+    }
+    return slots;
+  }
+
+  function balancedCapacities(total, groupSize, groupCount, allowOverStandard) {
     // 余りを最後の1グループに寄せず，できるだけ均等に分散する。
-    // 例：18人・最大4人組 → 4,4,4,3,3。
+    // 例：18人・4人基準 → 4,4,4,3,3。
     var base = Math.floor(total / groupCount);
     var extra = total % groupCount;
     var caps = [];
     for (var i = 0; i < groupCount; i++) {
       caps.push(base + (i < extra ? 1 : 0));
     }
-    // 念のため，設定された最大人数を超えないようにする。
-    return caps.map(function (n) { return Math.min(n, groupSize); });
+    // 行数上限を優先するために必要な場合だけ，基準人数を超えるグループを許容する。
+    return allowOverStandard ? caps : caps.map(function (n) { return Math.min(n, groupSize); });
   }
 
   function createFruitGroups(s) {
@@ -717,10 +1030,24 @@
   function renderHeader() {
     var s = appState.settings;
     var groupCount = appState.groups.length;
-    var maxNumber = s.mode === "number" ? Math.ceil(groupCount / Math.min(s.columnCount, groupCount || 1)) : "-";
-    els.modePill.textContent = s.mode === "number" ? "番号版" : "果物版";
+    var columns = s.mode === "number" ? Math.min(s.columnCount, groupCount || 1) : 0;
+    var maxNumber = s.mode === "number"
+      ? appState.groups.reduce(function (m, g) { return Math.max(m, g.row); }, 0)
+      : "-";
+    var capacityMax = appState.groups.reduce(function (m, g) { return Math.max(m, g.capacity || 0); }, 0);
+    var limitText = "";
+    if (s.mode === "number" && hasRowLimitSettings(s)) {
+      var limits = buildColumnLimits(s, columns, Math.ceil(s.totalStudents / s.groupSize));
+      limitText = "・列上限" + limits.map(function (n, i) { return columnLabel(i) + n; }).join("/");
+    }
+
+    els.modePill.textContent = s.mode === "number" ? (s.genderBalance ? "番号版・男女均等" : "番号版") : (s.genderBalance ? "果物版・男女均等" : "果物版");
+    els.roomPill.textContent = "参加コード: " + ROOM_ID;
+    els.roomInput.value = ROOM_ID;
+    els.roomHelp.textContent = "現在の参加コード：「" + ROOM_ID + "」。URL末尾に ?room=" + encodeURIComponent(ROOM_ID) + " を付けても同じクラスで開けます。";
+    updateShareUrlText();
     els.planPill.textContent = s.mode === "number"
-      ? s.totalStudents + "人・最大" + s.groupSize + "人組・" + s.columnCount + "列・" + groupCount + "組"
+      ? s.totalStudents + "人・基準" + s.groupSize + "人組・" + s.columnCount + "列・" + groupCount + "組" + limitText
       : s.totalStudents + "人・果物" + groupCount + "種類";
     if (appState.firebaseReady) {
       els.syncPill.textContent = "全員共通管理";
@@ -729,14 +1056,26 @@
     } else {
       els.syncPill.textContent = "ローカル版";
       els.syncPill.className = "pill warn";
-      els.metaText.innerHTML = "Firebase未設定のため，抽選済み状態は端末ごとの保存です。厳密な4人組管理にはFirebase設定を入れてください。左上を5回タップすると教員用管理画面が開きます。";
+      els.metaText.innerHTML = "Firebase未設定のため，抽選済み状態は端末ごとの保存です。厳密な人数管理にはFirebase設定を入れてください。左上を5回タップすると教員用管理画面が開きます。";
     }
-    els.leadText.textContent = s.mode === "number"
-      ? "抽選は1回だけ行えます。同じ番号の人どうしで集まってください。"
-      : "抽選は1回だけ行えます。同じ果物の人どうしで集まってください。";
-    els.mapNote.textContent = s.mode === "number"
-      ? "この例では，列はA，B，C…，番号は1，2，3…です。人数が割り切れない場合は，最後の1組だけが極端に少なくならないよう，上限人数を複数グループに分散します。現在の番号上限は " + maxNumber + " です。"
-      : "果物版では配置図は簡易一覧として表示されます。4人組にしたい場合は番号版が適しています。";
+    els.leadText.textContent = s.genderBalance
+      ? "抽選は1回だけ行えます。男女均等モードのため，同意後に性別を選んでから抽選します。"
+      : (s.mode === "number"
+        ? "抽選は1回だけ行えます。同じ番号の人どうしで集まってください。"
+        : "抽選は1回だけ行えます。同じ果物の人どうしで集まってください。");
+
+    if (s.mode === "number") {
+      var note = "この例では，列はA，B，C…，番号は1，2，3…です。人数が割り切れない場合は，最後の1組だけが極端に少なくならないよう複数グループに分散します。現在の番号上限は " + maxNumber + " です。";
+      if (capacityMax > s.groupSize) {
+        note += " ただし，行数上限を優先したため，一部に" + capacityMax + "人組が発生します。4人以下を厳守する場合は，列数を増やすか，各列の上限を増やしてください。";
+      }
+      if (s.genderBalance) {
+        note += " 男女均等モードでは，4人組は男性2・女性2を優先します。実際の男女比に偏りがある場合は，空いている枠へ割り当てます。";
+      }
+      els.mapNote.textContent = note;
+    } else {
+      els.mapNote.textContent = "果物版では配置図は簡易一覧として表示されます。4人組にしたい場合は番号版が適しています。";
+    }
   }
 
   function renderBadges() {
@@ -785,7 +1124,10 @@
     els.totalStudentsInput.value = s.totalStudents;
     els.groupSizeInput.value = s.groupSize;
     els.columnCountInput.value = s.columnCount;
+    els.rowLimitInput.value = s.rowLimitPerColumn || "";
+    els.columnLimitsInput.value = s.columnRowLimits || "";
     els.autoDailyResetInput.checked = s.autoDailyReset;
+    els.genderBalanceInput.checked = s.genderBalance;
   }
 
   function showInitialResult() {
@@ -811,12 +1153,15 @@
       els.resultSymbol.className = "resultSymbol fruit";
       els.resultSymbol.textContent = result.emoji || "🍎";
       els.resultName.textContent = result.label;
-      els.resultSub.innerHTML = escapeHtml(result.detail || (result.label + "グループ")) + '<br>同じ果物の人どうしで集まってください。';
+      var fruitGenderText = result.assignedGender ? '<br>' + escapeHtml(genderLabel(result.assignedGender) + 'として抽選しました。') : '';
+      els.resultSub.innerHTML = escapeHtml(result.detail || (result.label + "グループ")) + '<br>同じ果物の人どうしで集まってください。' + fruitGenderText;
     } else {
       els.resultSymbol.className = "resultSymbol";
       els.resultSymbol.textContent = result.label;
       els.resultName.textContent = result.detail || result.label;
-      els.resultSub.innerHTML = "同じ番号の人どうしで集まってください。<br>例：" + escapeHtml(result.label) + " の人は同じグループです。";
+      var genderText = result.assignedGender ? '<br>' + escapeHtml(genderLabel(result.assignedGender) + 'として抽選しました。') : '';
+      var relaxedText = result.genderRelaxed ? '<br>男女比の都合により，空いている枠へ割り当てています。' : '';
+      els.resultSub.innerHTML = "同じ番号の人どうしで集まってください。<br>例：" + escapeHtml(result.label) + " の人は同じグループです。" + genderText + relaxedText;
     }
     setLockedUI(true);
   }
@@ -843,6 +1188,14 @@
 
   async function draw() {
     if (!appState.firebaseReady && localStorage.getItem(LOCK_KEY) === "1") return;
+    var selectedGender = "";
+    if (appState.settings.genderBalance) {
+      selectedGender = getSelectedGender();
+      if (!selectedGender) {
+        showGenderPanel();
+        return;
+      }
+    }
     els.drawButton.disabled = true;
     els.drawButton.textContent = "抽選中…";
 
@@ -853,7 +1206,7 @@
           showResult(existing);
           return;
         }
-        var result = await drawWithFirebaseCapacity();
+        var result = await drawWithFirebaseCapacity(selectedGender);
         if (!result) {
           alert("すべてのグループが上限に達しています。教員用管理画面で全員分をリセットしてください。");
           showInitialResult();
@@ -863,7 +1216,8 @@
         saveLocalResult(result);
         showResult(result);
       } else {
-        var localResult = pickRandom(appState.groups);
+        var localResult = Object.assign({}, pickRandom(appState.groups));
+        if (selectedGender) localResult.assignedGender = selectedGender;
         saveLocalResult(localResult);
         showResult(localResult);
       }
@@ -874,6 +1228,39 @@
       try { saved = JSON.parse(localStorage.getItem(RESULT_KEY) || "null"); } catch (err) {}
       if (saved) showResult(saved); else showInitialResult();
     }
+  }
+
+  function showGenderPanel() {
+    els.genderPanel.classList.add("show");
+    els.genderConsentStep.classList.remove("hidden");
+    els.genderChoiceStep.classList.add("hidden");
+    els.status.textContent = "男女均等モードです。性別を選択してから抽選してください。";
+  }
+
+  function hideGenderPanel() {
+    els.genderPanel.classList.remove("show");
+  }
+
+  function chooseGenderAndDraw(gender) {
+    localStorage.setItem(GENDER_KEY_PREFIX + ROOM_ID, gender);
+    hideGenderPanel();
+    draw();
+  }
+
+  function getSelectedGender() {
+    var g = localStorage.getItem(GENDER_KEY_PREFIX + ROOM_ID) || "";
+    return (g === "male" || g === "female") ? g : "";
+  }
+
+  function genderLabel(gender) {
+    if (gender === "male") return "男性";
+    if (gender === "female") return "女性";
+    return "未指定";
+  }
+
+  function genderCapForGroup(group) {
+    var cap = Math.max(1, group.capacity || appState.settings.groupSize || 4);
+    return Math.ceil(cap / 2);
   }
 
   function pickRandom(arr) {
@@ -891,7 +1278,16 @@
     return copy;
   }
 
-  async function drawWithFirebaseCapacity() {
+  async function drawWithFirebaseCapacity(selectedGender) {
+    if (appState.settings.genderBalance && selectedGender) {
+      var balanced = await drawWithFirebaseGenderCapacity(selectedGender, false);
+      if (balanced) return balanced;
+      // 実際の男女比が偏っている場合，性別枠だけを理由に抽選不能にならないよう，空いている総枠へ割り当てる。
+      var relaxed = await drawWithFirebaseGenderCapacity(selectedGender, true);
+      if (relaxed) return relaxed;
+      return null;
+    }
+
     var f = appState.firebaseFns;
     var candidates = shuffled(appState.groups);
     for (var i = 0; i < candidates.length; i++) {
@@ -904,6 +1300,33 @@
       });
       if (tx.committed) {
         return g;
+      }
+    }
+    return null;
+  }
+
+  async function drawWithFirebaseGenderCapacity(selectedGender, relaxed) {
+    var f = appState.firebaseFns;
+    var candidates = shuffled(appState.groups);
+    for (var i = 0; i < candidates.length; i++) {
+      var g = candidates[i];
+      var statRef = f.ref(appState.db, dbPath("groupStats/" + safeKey(g.id)));
+      var tx = await f.runTransaction(statRef, function (current) {
+        var stat = current || { total: 0, male: 0, female: 0 };
+        stat.total = stat.total || 0;
+        stat.male = stat.male || 0;
+        stat.female = stat.female || 0;
+        if (stat.total >= g.capacity) return;
+        if (!relaxed && stat[selectedGender] >= genderCapForGroup(g)) return;
+        stat.total += 1;
+        stat[selectedGender] += 1;
+        return stat;
+      });
+      if (tx.committed) {
+        var result = Object.assign({}, g);
+        result.assignedGender = selectedGender;
+        result.genderRelaxed = !!relaxed;
+        return result;
       }
     }
     return null;
@@ -954,14 +1377,20 @@
     var oldTotal = appState.settings.totalStudents;
     var oldSize = appState.settings.groupSize;
     var oldColumns = appState.settings.columnCount;
+    var oldRowLimit = appState.settings.rowLimitPerColumn;
+    var oldColumnLimits = appState.settings.columnRowLimits;
+    var oldGenderBalance = appState.settings.genderBalance;
     appState.settings.mode = els.modeSelect.value;
     appState.settings.totalStudents = clampInt(els.totalStudentsInput.value, 1, 600, 80);
     appState.settings.groupSize = clampInt(els.groupSizeInput.value, 1, 20, 4);
     appState.settings.columnCount = clampInt(els.columnCountInput.value, 1, 12, 4);
+    appState.settings.rowLimitPerColumn = clampOptionalInt(els.rowLimitInput.value, 0, 30);
+    appState.settings.columnRowLimits = els.columnLimitsInput.value.trim();
     appState.settings.autoDailyReset = !!els.autoDailyResetInput.checked;
+    appState.settings.genderBalance = !!els.genderBalanceInput.checked;
     appState.settings = normalizeSettings(appState.settings);
 
-    var layoutChanged = oldMode !== appState.settings.mode || oldTotal !== appState.settings.totalStudents || oldSize !== appState.settings.groupSize || oldColumns !== appState.settings.columnCount;
+    var layoutChanged = oldMode !== appState.settings.mode || oldTotal !== appState.settings.totalStudents || oldSize !== appState.settings.groupSize || oldColumns !== appState.settings.columnCount || oldRowLimit !== appState.settings.rowLimitPerColumn || oldColumnLimits !== appState.settings.columnRowLimits || oldGenderBalance !== appState.settings.genderBalance;
     if (layoutChanged) {
       appState.settings.sessionId = String(Date.now());
       clearLocalDrawState();
@@ -980,17 +1409,31 @@
     if (appState.firebaseReady) {
       var f = appState.firebaseFns;
       var assignment = await getFirebaseAssignment();
-      if (assignment) {
-        var countRef = f.ref(appState.db, dbPath("groupCounts/" + safeKey(assignment.id)));
-        await f.runTransaction(countRef, function (current) {
-          var now = current || 0;
-          return Math.max(0, now - 1);
-        });
-      }
+      if (assignment) await decrementFirebaseCount(assignment);
       await f.remove(f.ref(appState.db, dbPath("assignments/" + getDeviceId())));
     }
     showInitialResult();
     alert("この端末の抽選状態をリセットしました。");
+  }
+
+  async function decrementFirebaseCount(result) {
+    var f = appState.firebaseFns;
+    if (result && result.assignedGender) {
+      var statRef = f.ref(appState.db, dbPath("groupStats/" + safeKey(result.id)));
+      await f.runTransaction(statRef, function (current) {
+        var stat = current || { total: 0, male: 0, female: 0 };
+        stat.total = Math.max(0, (stat.total || 0) - 1);
+        if (result.assignedGender === "male") stat.male = Math.max(0, (stat.male || 0) - 1);
+        if (result.assignedGender === "female") stat.female = Math.max(0, (stat.female || 0) - 1);
+        return stat;
+      });
+    } else {
+      var countRef = f.ref(appState.db, dbPath("groupCounts/" + safeKey(result.id)));
+      await f.runTransaction(countRef, function (current) {
+        var now = current || 0;
+        return Math.max(0, now - 1);
+      });
+    }
   }
 
   async function resetAllFromAdmin() {
@@ -1015,6 +1458,7 @@
     var f = appState.firebaseFns;
     await f.remove(f.ref(appState.db, dbPath("assignments")));
     await f.remove(f.ref(appState.db, dbPath("groupCounts")));
+    await f.remove(f.ref(appState.db, dbPath("groupStats")));
     await f.set(f.ref(appState.db, dbPath("settings")), appState.settings);
   }
 
@@ -1029,16 +1473,32 @@
     var counts = {};
     if (appState.firebaseReady) {
       var f = appState.firebaseFns;
-      var snap = await f.get(f.ref(appState.db, dbPath("groupCounts")));
+      var path = appState.settings.genderBalance ? "groupStats" : "groupCounts";
+      var snap = await f.get(f.ref(appState.db, dbPath(path)));
       if (snap.exists()) counts = snap.val() || {};
     } else {
       var saved = null;
       try { saved = JSON.parse(localStorage.getItem(RESULT_KEY) || "null"); } catch (e) {}
-      if (saved) counts[safeKey(saved.id)] = 1;
+      if (saved) {
+        if (appState.settings.genderBalance && saved.assignedGender) {
+          counts[safeKey(saved.id)] = { total: 1, male: saved.assignedGender === "male" ? 1 : 0, female: saved.assignedGender === "female" ? 1 : 0 };
+        } else {
+          counts[safeKey(saved.id)] = 1;
+        }
+      }
     }
     els.countsGrid.innerHTML = appState.groups.map(function (g) {
-      var n = counts[safeKey(g.id)] || 0;
-      return '<div class="countItem"><strong>' + escapeHtml(g.type === "fruit" ? ((g.emoji || "") + " " + g.label) : g.label) + '</strong>' + n + ' / ' + g.capacity + '人</div>';
+      var key = safeKey(g.id);
+      var label = escapeHtml(g.type === "fruit" ? ((g.emoji || "") + " " + g.label) : g.label);
+      if (appState.settings.genderBalance) {
+        var stat = counts[key] || { total: 0, male: 0, female: 0 };
+        var total = stat.total || 0;
+        var male = stat.male || 0;
+        var female = stat.female || 0;
+        return '<div class="countItem"><strong>' + label + '</strong>' + total + ' / ' + g.capacity + '人<br>男' + male + '・女' + female + '</div>';
+      }
+      var n = counts[key] || 0;
+      return '<div class="countItem"><strong>' + label + '</strong>' + n + ' / ' + g.capacity + '人</div>';
     }).join("");
   }
 
