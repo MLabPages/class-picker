@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>グループ抽選（番号・配置図・行数上限・参加コード・男女均等対応版）</title>
+<title>グループ抽選（番号・配置図・行数上限・参加コードUI改善・男女均等対応版）</title>
 <style>
   :root {
     --bg: #f6f8fb;
@@ -89,6 +89,42 @@
     background: white;
   }
   .roomHelp { width: 100%; color: var(--muted); font-size: 12px; line-height: 1.55; }
+  .studentNotice {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.65;
+    text-align: left;
+  }
+  .roomBox .secondary.smallBtn { padding: 10px 14px; }
+  .genderPanel {
+    border-width: 2px !important;
+    border-color: #2563eb !important;
+  }
+  .genderPanel .stepBadge {
+    display: inline-block;
+    margin-bottom: 8px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .genderPanel .primary {
+    font-size: 17px;
+    padding: 14px 20px;
+  }
+  .genderPanel .bigChoice {
+    min-width: 160px;
+    font-size: 20px;
+    padding: 18px 22px;
+  }
   .buttonRow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .buttonRow select { flex: 0 0 auto; min-width: 120px; }
   .shareUrl {
@@ -371,11 +407,34 @@
   </div>
 
   <div class="roomBox">
+    <div class="studentNotice" id="roomNotice">参加コードは教員から案内された数字です。URLから開いた場合は自動で入っています。教員から指示がない場合は，この欄は変更せずに抽選へ進んでください。</div>
     <label for="roomInput">参加コード</label>
-    <input id="roomInput" type="text" inputmode="numeric" autocomplete="off" placeholder="例：42871963">
-    <button id="applyRoomButton" class="secondary smallBtn" type="button">このコードで入る</button>
-    <div class="roomHelp" id="roomHelp">同じ参加コードを入力した参加者だけが，同じクラスとして抽選されます。</div>
+    <input id="roomInput" type="text" inputmode="numeric" autocomplete="off" placeholder="教員から伝えられた数字">
+    <button id="applyRoomButton" class="secondary smallBtn" type="button">コードを確認して入る</button>
+    <div class="roomHelp" id="roomHelp">同じ参加コードの人だけが，同じクラスとして抽選されます。別の授業・クラスでは別コードを使います。</div>
   </div>
+
+  <section class="genderPanel" id="genderPanel">
+    <h2>抽選前の確認</h2>
+    <div id="genderConsentStep">
+      <span class="stepBadge">ステップ1/2</span>
+      <p><strong>男女均等モードがオンです。</strong></p>
+      <p>グループ内の人数をできるだけ男性2名・女性2名に近づけるため，次の画面で性別を選んでから抽選します。</p>
+      <p>この情報はグループ分けのためだけに使用し，氏名とは結び付けません。Firebase利用時は現在の参加コード内に一時保存され，教員用管理画面のリセットで削除されます。</p>
+      <div class="genderChoices">
+        <button id="agreeGenderButton" class="primary" type="button">確認しました。性別選択へ進む</button>
+        <button id="cancelGenderButton" class="secondary smallBtn" type="button">戻る</button>
+      </div>
+    </div>
+    <div id="genderChoiceStep" class="hidden">
+      <span class="stepBadge">ステップ2/2</span>
+      <p><strong>性別を選ぶと，すぐに抽選します。</strong></p>
+      <div class="genderChoices">
+        <button id="maleButton" class="secondary bigChoice" type="button">男性</button>
+        <button id="femaleButton" class="secondary bigChoice" type="button">女性</button>
+      </div>
+    </div>
+  </section>
 
   <section class="card" aria-live="polite">
     <div id="resultSymbol" class="resultSymbol">🎲</div>
@@ -388,25 +447,6 @@
     <button id="drawButton" class="primary" type="button">抽選する</button>
     <button id="mapButton" class="secondary" type="button">配置図を表示</button>
   </div>
-
-  <section class="genderPanel" id="genderPanel">
-    <h2>性別情報の利用について</h2>
-    <div id="genderConsentStep">
-      <p>男女均等モードがオンのため，グループ内の人数をできるだけ男性2名・女性2名に近づける目的で，性別を選択してから抽選します。</p>
-      <p>この情報はグループ分けのためだけに使用し，氏名とは結び付けません。Firebase利用時は現在のルーム内に一時保存され，教員用管理画面のリセットで削除されます。</p>
-      <div class="genderChoices">
-        <button id="agreeGenderButton" class="primary smallBtn" type="button">同意して選択へ</button>
-        <button id="cancelGenderButton" class="secondary smallBtn" type="button">戻る</button>
-      </div>
-    </div>
-    <div id="genderChoiceStep" class="hidden">
-      <p>抽選に使う区分を選んでください。</p>
-      <div class="genderChoices">
-        <button id="maleButton" class="secondary" type="button">男性</button>
-        <button id="femaleButton" class="secondary" type="button">女性</button>
-      </div>
-    </div>
-  </section>
 
   <div class="meta" id="metaText">
     左上を5回タップすると，教員用管理画面が開きます。
@@ -621,27 +661,16 @@
   async function init() {
     ensureDeviceId();
     renderAll();
-    bindEvents();
     await setupFirebaseIfPossible();
     if (appState.firebaseReady) {
-      try {
-        await loadSettingsFromFirebase();
-        await performFirebaseDailyResetIfNeeded();
-      } catch (e) {
-        console.warn("Firebaseの読み書きに失敗しました。Realtime Databaseのルールを確認してください。ローカル版として動作します。", e);
-        appState.firebaseReady = false;
-        performLocalDailyResetIfNeeded();
-      }
+      await loadSettingsFromFirebase();
+      await performFirebaseDailyResetIfNeeded();
     } else {
       performLocalDailyResetIfNeeded();
     }
     renderAll();
-    try {
-      await restoreState();
-    } catch (e) {
-      console.warn("抽選状態の復元に失敗しました。初期状態で表示します。", e);
-      showInitialResult();
-    }
+    await restoreState();
+    bindEvents();
   }
 
   function bindEvents() {
@@ -657,6 +686,8 @@
     els.agreeGenderButton.addEventListener("click", function () {
       els.genderConsentStep.classList.add("hidden");
       els.genderChoiceStep.classList.remove("hidden");
+      els.status.textContent = "性別を選ぶと，すぐに抽選します。";
+      try { els.genderPanel.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
     });
     els.cancelGenderButton.addEventListener("click", hideGenderPanel);
     els.maleButton.addEventListener("click", function () { chooseGenderAndDraw("male"); });
@@ -723,9 +754,15 @@
   }
 
   async function applyRoomFromInput() {
-    var nextRoom = normalizeRoomId(els.roomInput.value);
+    var rawRoomValue = String(els.roomInput.value || "").trim();
+    if (!rawRoomValue) {
+      alert("教員から案内された参加コードを入力してください。URLから開いた場合は自動入力されています。教員から指示がない場合は，そのまま抽選へ進んでください。");
+      els.roomInput.value = ROOM_ID;
+      return;
+    }
+    var nextRoom = normalizeRoomId(rawRoomValue);
     if (nextRoom === ROOM_ID) {
-      alert("すでにこの参加コードに入っています。");
+      alert("この参加コードで入っています。そのまま抽選へ進んでください。");
       return;
     }
     ROOM_ID = nextRoom;
@@ -1044,7 +1081,7 @@
     els.modePill.textContent = s.mode === "number" ? (s.genderBalance ? "番号版・男女均等" : "番号版") : (s.genderBalance ? "果物版・男女均等" : "果物版");
     els.roomPill.textContent = "参加コード: " + ROOM_ID;
     els.roomInput.value = ROOM_ID;
-    els.roomHelp.textContent = "現在の参加コード：「" + ROOM_ID + "」。URL末尾に ?room=" + encodeURIComponent(ROOM_ID) + " を付けても同じクラスで開けます。";
+    els.roomHelp.textContent = "現在の参加コード：「" + ROOM_ID + "」。教員から別のコードを案内された場合だけ入力し直してください。URL末尾に ?room=" + encodeURIComponent(ROOM_ID) + " を付けても同じクラスで開けます。";
     updateShareUrlText();
     els.planPill.textContent = s.mode === "number"
       ? s.totalStudents + "人・基準" + s.groupSize + "人組・" + s.columnCount + "列・" + groupCount + "組" + limitText
@@ -1134,14 +1171,14 @@
     els.resultSymbol.className = "resultSymbol";
     els.resultSymbol.textContent = "🎲";
     els.resultName.textContent = "待機中";
-    els.resultSub.textContent = "抽選ボタンを押してください。";
+    els.resultSub.textContent = appState.settings.genderBalance ? "下のボタンから確認と性別選択へ進んでください。" : "抽選ボタンを押してください。";
     setLockedUI(false);
   }
 
   function setLockedUI(isLocked) {
     els.drawButton.disabled = isLocked;
-    els.drawButton.textContent = isLocked ? "抽選済み" : "抽選する";
-    els.status.textContent = isLocked ? "この端末では抽選済みです" : "まだ抽選していません";
+    els.drawButton.textContent = isLocked ? "抽選済み" : (appState.settings.genderBalance ? "抽選前の確認へ進む" : "抽選する");
+    els.status.textContent = isLocked ? "この端末では抽選済みです" : (appState.settings.genderBalance ? "男女均等モードです。抽選前に確認と性別選択があります。" : "まだ抽選していません");
   }
 
   function showResult(result) {
@@ -1234,7 +1271,8 @@
     els.genderPanel.classList.add("show");
     els.genderConsentStep.classList.remove("hidden");
     els.genderChoiceStep.classList.add("hidden");
-    els.status.textContent = "男女均等モードです。性別を選択してから抽選してください。";
+    els.status.textContent = "抽選前の確認が必要です。画面上の確認ボタンから進んでください。";
+    try { els.genderPanel.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) { location.hash = "genderPanel"; }
   }
 
   function hideGenderPanel() {
