@@ -587,8 +587,9 @@
         <label for="codeDigitsSelect">参加コード作成</label>
         <div class="buttonRow">
           <select id="codeDigitsSelect">
+            <option value="4" selected>4桁</option>
             <option value="6">6桁</option>
-            <option value="8" selected>8桁</option>
+            <option value="8">8桁</option>
           </select>
           <button id="generateRoomCodeButton" class="secondary smallBtn" type="button">コードを作成して切替</button>
           <button id="copyRoomUrlButton" class="secondary smallBtn" type="button">共有URLをコピー</button>
@@ -602,7 +603,7 @@
       Firebase設定が入っている場合は，全員共通で残数を管理し，A1などが上限人数に達したらそれ以上割り当てません。<br>
       行数上限を入れると，A1〜A5のように縦方向の番号上限を抑えられます。105人・4人基準・5列・各列5グループの場合は25グループに収めるため，一部5人組になります。<br>
       男女均等モードをオンにすると，参加者は同意後に男性・女性を選んでから抽選します。4人組では原則2名ずつの枠を優先しますが，実際の男女比に偏りがある場合は，空き枠を使って割り当てます。<br>
-      参加コードを使うと，複数クラスを同時に分けて運用できます。同じ参加コードの参加者だけが同じ抽選データを共有します。8桁コードにすると番号被りの可能性をかなり下げられます。<br>
+      参加コードを使うと，複数クラスを同時に分けて運用できます。同じ参加コードの参加者だけが同じ抽選データを共有します。初期表示は4桁で，必要に応じて6桁・8桁のコードも作成できます。<br>
       Firebase未設定の場合もページ自体は動きますが，残数管理は端末ごとになります。授業本番で厳密に人数管理する場合はFirebase設定版を使ってください。
     </div>
 
@@ -635,7 +636,8 @@
     messagingSenderId: "756663742740",
     appId: "1:756663742740:web:fae503b097b9c814475201"
   };
-  var DEFAULT_ROOM_ID = "00000000";
+  var DEFAULT_ROOM_ID = "0000";
+  var LEGACY_DEFAULT_ROOM_ID = "00000000";
   var ROOM_STORAGE_KEY = "group_picker_room_id_v1";
   var ROOM_ID = getInitialRoomId(); // 参加コードごとに，設定・抽選状況・リセットを分けます。
 
@@ -824,6 +826,7 @@
     } catch (e) {}
     var saved = "";
     try { saved = localStorage.getItem(ROOM_STORAGE_KEY) || ""; } catch (e) {}
+    if (!fromUrl && saved === LEGACY_DEFAULT_ROOM_ID) saved = "";
     var room = normalizeRoomId(fromUrl || saved || DEFAULT_ROOM_ID);
     try { localStorage.setItem(ROOM_STORAGE_KEY, room); } catch (e) {}
     return room;
@@ -900,7 +903,7 @@
 
   async function generateAndApplyRoomCode() {
     if (!verifyAdminCode()) return;
-    var digits = clampInt(els.codeDigitsSelect.value, 6, 8, 8);
+    var digits = clampInt(els.codeDigitsSelect.value, 4, 8, 4);
     var nextCode = generateRoomCode(digits);
     var guard = 0;
     while (nextCode === ROOM_ID && guard < 5) {
