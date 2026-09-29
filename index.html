@@ -578,8 +578,9 @@
         <input id="columnCountInput" type="number" min="1" max="12" step="1">
       </div>
       <div class="field">
-        <label for="rowLimitInput">1列あたりのグループ数上限（数字のみ版は初期値10）</label>
-        <input id="rowLimitInput" type="number" min="0" max="30" step="1" placeholder="例：10。数字のみ版は空欄でも10">
+        <label for="rowLimitInput">1列あたりのグループ数上限</label>
+        <input id="rowLimitInput" type="number" min="0" max="30" step="1" placeholder="例：10">
+        <div class="fieldHint" id="rowLimitHint"></div>
       </div>
       <div class="field">
         <label for="columnFillModeSelect">折り返し方（番号表示のみ）</label>
@@ -591,7 +592,7 @@
       </div>
       <div class="field">
         <label for="columnLimitsInput">列別のグループ数上限（任意）</label>
-        <textarea id="columnLimitsInput" placeholder="例：5,5,5,6,6&#10;各列の上限を左から順に指定。空欄なら上の行数上限を全列に適用。"></textarea>
+        <textarea id="columnLimitsInput" placeholder="例：5,5,5,6,6&#10;各列の上限を左から順に指定。空欄なら「1列あたりのグループ数上限」を全列に適用。"></textarea>
       </div>
       <div class="field">
         <label>日付変更時の自動リセット</label>
@@ -627,7 +628,7 @@
       <strong>使い分け：</strong><br>
       Firebase設定が入っている場合は，全員共通で残数を管理します。抽選では，空きのある組のうち今の人数が少ない組から順に割り当て（同じ人数の組どうしはランダム），上限人数に達した組にはそれ以上割り当てません。<br>
       欠席者が次回に抽選する場合：「日付変更時の自動リセット」をオフにして保存しておくと前回の組分けが残り，後から抽選した人は人数の少ない組に入ります。前回抽選した人は，同じ端末・同じブラウザで開くと番号が再表示されます。人数・列数などを変えて保存したり，「全員分をリセット」を押したりすると組分けは消えます。<br>
-      行数上限を入れると，A1〜A5のように縦方向の番号上限を抑えられます。配置枠が足りない場合は枠数に収めるため，一部の組が基準人数より多くなります（例：105人・4人基準・5列・各列5グループなら25組）。<br>
+      1列あたりのグループ数上限を入れると，A1〜A5のように縦方向の番号上限を抑えられます。配置枠が足りない場合は枠数に収めるため，一部の組が基準人数より多くなります（例：105人・4人基準・5列・各列5グループなら25組）。<br>
       余り人数の配分：「余った人を後ろの組に1人ずつ加える」は基準人数より少ない組を作らず，「各組に均等配分」は基準人数より多い組を作りません（例：181人・4人基準なら，前者は45組で4人組44・5人組1，後者は46組で4人組43・3人組3）。<br>
       折り返し方：「各列の組数をできるだけそろえる」と「1列の上限まで埋めてから次の列へ」を選べます（例：45組・5列・1列の上限10なら，前者は各列9組，後者は10・10・10・10・5組）。数字のみ版は列ごとに上から通し番号を振ります。<br>
       男女均等モードをオンにすると，参加者は同意後に男性・女性を選んでから抽選します。4人組では原則2名ずつの枠を優先しますが，実際の男女比に偏りがある場合は，空き枠を使って割り当てます。<br>
@@ -745,6 +746,7 @@
     columnFillPreview: document.getElementById("columnFillPreview"),
     columnCountInput: document.getElementById("columnCountInput"),
     rowLimitInput: document.getElementById("rowLimitInput"),
+    rowLimitHint: document.getElementById("rowLimitHint"),
     columnLimitsInput: document.getElementById("columnLimitsInput"),
     autoDailyResetInput: document.getElementById("autoDailyResetInput"),
     genderBalanceInput: document.getElementById("genderBalanceInput"),
@@ -1428,6 +1430,8 @@
   function renderAdminPreview() {
     var s = readAdminFormSettings();
     if (!isNumberMode(s.mode)) {
+      els.rowLimitInput.placeholder = "果物版では使いません";
+      els.rowLimitHint.textContent = "果物版では使いません。";
       els.remainderPreview.textContent = "果物版では使いません。";
       els.columnFillPreview.textContent = "果物版では使いません。";
       return;
@@ -1435,6 +1439,13 @@
     var extraPlan = planNumberLayout(Object.assign({}, s, { remainderMode: "singleExtra" }));
     var evenPlan = planNumberLayout(Object.assign({}, s, { remainderMode: "balanced" }));
     var plan = s.remainderMode === "balanced" ? evenPlan : extraPlan;
+
+    // 上限は最大値なので，空欄のときの扱いと，今の設定で1列に実際に並ぶ組数の最大を示す。
+    var maxInColumn = plan.columnCounts.reduce(function (m, n) { return Math.max(m, n); }, 0);
+    els.rowLimitInput.placeholder = s.mode === "plainNumber" ? "空欄なら10" : "空欄なら自動";
+    els.rowLimitHint.textContent = "各列に並べる組数の上限です。"
+      + (s.mode === "plainNumber" ? "空欄なら10として扱います。" : "空欄なら，全組が入るように自動で決めます。")
+      + "今の設定では，1列に並ぶのは最大" + maxInColumn + "組です。";
 
     var remainderHtml = previewLinesHtml(s.totalStudents + "人・基準" + s.groupSize + "人の場合", [
       { name: "後ろの組に加える", result: describePlan(extraPlan), selected: s.remainderMode === "singleExtra" },
