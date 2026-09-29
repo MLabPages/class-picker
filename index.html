@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>グループ抽選（番号・配置図・行数上限・参加コードUI改善・男女均等対応版）</title>
+<title>グループ抽選（番号・数字のみ・配置図・男女均等対応版）</title>
 <style>
   :root {
     --bg: #f6f8fb;
@@ -545,7 +545,8 @@
       <div class="field">
         <label for="modeSelect">表示方式</label>
         <select id="modeSelect">
-          <option value="number">番号版：A1，A2，B1…</option>
+          <option value="number">列番号版：A1，A2，B1…</option>
+          <option value="plainNumber">数字のみ：1，2，3…（1列10組で折り返し）</option>
           <option value="fruit">果物版：りんご，みかん…</option>
         </select>
       </div>
@@ -558,16 +559,23 @@
         <input id="groupSizeInput" type="number" min="1" max="20" step="1">
       </div>
       <div class="field">
+        <label for="remainderModeSelect">余り人数の配分（番号表示のみ）</label>
+        <select id="remainderModeSelect">
+          <option value="singleExtra">1人余りを最後の組へ（181人・4人基準：4人組44、5人組1）</option>
+          <option value="balanced">従来方式：各組に均等配分（同条件：4人組43、3人組3）</option>
+        </select>
+      </div>
+      <div class="field">
         <label for="columnCountInput">列数</label>
         <input id="columnCountInput" type="number" min="1" max="12" step="1">
       </div>
       <div class="field">
-        <label for="rowLimitInput">1列あたりのグループ数上限（任意）</label>
-        <input id="rowLimitInput" type="number" min="0" max="30" step="1" placeholder="例：5。空欄なら自動">
+        <label for="rowLimitInput">1列あたりのグループ数上限（数字のみ版は初期値10）</label>
+        <input id="rowLimitInput" type="number" min="0" max="30" step="1" placeholder="例：10。数字のみ版は空欄でも10">
       </div>
       <div class="field">
         <label for="columnLimitsInput">列別のグループ数上限（任意）</label>
-        <textarea id="columnLimitsInput" placeholder="例：5,5,5,6,6&#10;A〜E列の上限を順に指定。空欄なら上の行数上限を全列に適用。"></textarea>
+        <textarea id="columnLimitsInput" placeholder="例：5,5,5,6,6&#10;各列の上限を左から順に指定。空欄なら上の行数上限を全列に適用。"></textarea>
       </div>
       <div class="field">
         <label>日付変更時の自動リセット</label>
@@ -602,6 +610,7 @@
       <strong>使い分け：</strong><br>
       Firebase設定が入っている場合は，全員共通で残数を管理し，A1などが上限人数に達したらそれ以上割り当てません。<br>
       行数上限を入れると，A1〜A5のように縦方向の番号上限を抑えられます。105人・4人基準・5列・各列5グループの場合は25グループに収めるため，一部5人組になります。<br>
+      数字のみ版は，1〜10を1列に並べ，11番から次の列へ続けます。181人・4人基準なら，45グループ（4人組44・5人組1）になります。<br>
       男女均等モードをオンにすると，参加者は同意後に男性・女性を選んでから抽選します。4人組では原則2名ずつの枠を優先しますが，実際の男女比に偏りがある場合は，空き枠を使って割り当てます。<br>
       参加コードを使うと，複数クラスを同時に分けて運用できます。同じ参加コードの参加者だけが同じ抽選データを共有します。初期表示は4桁で，必要に応じて6桁・8桁のコードも作成できます。<br>
       Firebase未設定の場合もページ自体は動きますが，残数管理は端末ごとになります。授業本番で厳密に人数管理する場合はFirebase設定版を使ってください。
@@ -645,6 +654,7 @@
     mode: "number",
     totalStudents: 80,
     groupSize: 4,
+    remainderMode: "singleExtra",
     columnCount: 4,
     rowLimitPerColumn: 0,
     columnRowLimits: "",
@@ -709,6 +719,7 @@
     modeSelect: document.getElementById("modeSelect"),
     totalStudentsInput: document.getElementById("totalStudentsInput"),
     groupSizeInput: document.getElementById("groupSizeInput"),
+    remainderModeSelect: document.getElementById("remainderModeSelect"),
     columnCountInput: document.getElementById("columnCountInput"),
     rowLimitInput: document.getElementById("rowLimitInput"),
     columnLimitsInput: document.getElementById("columnLimitsInput"),
@@ -971,9 +982,10 @@
 
   function normalizeSettings(s) {
     var out = Object.assign({}, DEFAULT_SETTINGS, s || {});
-    out.mode = out.mode === "fruit" ? "fruit" : "number";
+    out.mode = out.mode === "fruit" || out.mode === "plainNumber" ? out.mode : "number";
     out.totalStudents = clampInt(out.totalStudents, 1, 600, 80);
     out.groupSize = clampInt(out.groupSize, 1, 20, 4);
+    out.remainderMode = out.remainderMode === "balanced" ? "balanced" : "singleExtra";
     out.columnCount = clampInt(out.columnCount, 1, 12, 4);
     out.rowLimitPerColumn = clampOptionalInt(out.rowLimitPerColumn, 0, 30);
     out.columnRowLimits = typeof out.columnRowLimits === "string" ? out.columnRowLimits : "";
@@ -1069,7 +1081,9 @@
   function createNumberGroups(s) {
     var total = s.totalStudents;
     var groupSize = s.groupSize;
-    var neededGroupCount = Math.ceil(total / groupSize);
+    var fullGroupCount = Math.ceil(total / groupSize);
+    var onePersonRemainder = s.remainderMode === "singleExtra" && total > groupSize && total % groupSize === 1;
+    var neededGroupCount = Math.max(1, fullGroupCount - (onePersonRemainder ? 1 : 0));
     var columns = Math.min(s.columnCount, neededGroupCount);
     var columnLimits = buildColumnLimits(s, columns, neededGroupCount);
     var maxSlots = columnLimits.reduce(function (sum, n) { return sum + n; }, 0);
@@ -1083,13 +1097,19 @@
       groupCount = maxSlots;
     }
 
-    var capacities = balancedCapacities(total, groupSize, groupCount, hasLimits && maxSlots < neededGroupCount);
-    var slots = buildSlots(columns, columnLimits, groupCount);
+    var allowOverStandard = total > groupCount * groupSize;
+    var placeSingleExtraAtEnd = onePersonRemainder && groupCount === neededGroupCount;
+    var capacities = balancedCapacities(total, groupSize, groupCount, allowOverStandard, placeSingleExtraAtEnd);
+    var numberOnly = s.mode === "plainNumber";
+    var slots = buildSlots(columns, columnLimits, groupCount, numberOnly);
     var groups = [];
 
     for (var i = 0; i < groupCount; i++) {
-      var slot = slots[i] || { col: columnLabel(i % columns), row: Math.floor(i / columns) + 1 };
-      var label = slot.col + slot.row;
+      var fallbackSlot = numberOnly
+        ? { col: String(Math.floor(i / 10) + 1), row: (i % 10) + 1 }
+        : { col: columnLabel(i % columns), row: Math.floor(i / columns) + 1 };
+      var slot = slots[i] || fallbackSlot;
+      var label = numberOnly ? String(i + 1) : slot.col + slot.row;
       groups.push({
         id: label,
         label: label,
@@ -1097,14 +1117,14 @@
         col: slot.col,
         row: slot.row,
         capacity: capacities[i],
-        detail: slot.col + "列・" + slot.row + "番"
+        detail: numberOnly ? label + "番" : slot.col + "列・" + slot.row + "番"
       });
     }
     return groups;
   }
 
   function hasRowLimitSettings(s) {
-    return !!(s.rowLimitPerColumn || String(s.columnRowLimits || "").trim());
+    return s.mode === "plainNumber" || !!(s.rowLimitPerColumn || String(s.columnRowLimits || "").trim());
   }
 
   function parseColumnRowLimits(text, columns) {
@@ -1117,7 +1137,7 @@
 
   function buildColumnLimits(s, columns, neededGroupCount) {
     var specified = parseColumnRowLimits(s.columnRowLimits, columns);
-    var fallbackRows = s.rowLimitPerColumn || Math.ceil(neededGroupCount / columns);
+    var fallbackRows = s.rowLimitPerColumn || (s.mode === "plainNumber" ? 10 : Math.ceil(neededGroupCount / columns));
     var limits = [];
     for (var c = 0; c < columns; c++) {
       limits.push(specified[c] || fallbackRows);
@@ -1125,9 +1145,18 @@
     return limits.map(function (n) { return clampInt(n, 1, 30, 1); });
   }
 
-  function buildSlots(columns, columnLimits, groupCount) {
+  function buildSlots(columns, columnLimits, groupCount, numberOnly) {
     var maxRow = columnLimits.reduce(function (m, n) { return Math.max(m, n); }, 0);
     var slots = [];
+    if (numberOnly) {
+      for (var c = 0; c < columns; c++) {
+        for (var columnRow = 1; columnRow <= columnLimits[c]; columnRow++) {
+          slots.push({ col: String(c + 1), row: columnRow });
+          if (slots.length >= groupCount) return slots;
+        }
+      }
+      return slots;
+    }
     for (var r = 1; r <= maxRow; r++) {
       for (var c = 0; c < columns; c++) {
         if (r <= columnLimits[c]) {
@@ -1139,14 +1168,15 @@
     return slots;
   }
 
-  function balancedCapacities(total, groupSize, groupCount, allowOverStandard) {
-    // 余りを最後の1グループに寄せず，できるだけ均等に分散する。
-    // 例：18人・4人基準 → 4,4,4,3,3。
+  function balancedCapacities(total, groupSize, groupCount, allowOverStandard, placeExtraAtEnd) {
+    // 通常は余りを分散する。1人だけ余る場合は，最後の1組にまとめて基準人数+1にする。
+    // 例：18人・4人基準 → 4,4,4,3,3。181人・4人基準 → 4人組44，5人組1。
     var base = Math.floor(total / groupCount);
     var extra = total % groupCount;
     var caps = [];
     for (var i = 0; i < groupCount; i++) {
-      caps.push(base + (i < extra ? 1 : 0));
+      var receivesExtra = placeExtraAtEnd ? i >= groupCount - extra : i < extra;
+      caps.push(base + (receivesExtra ? 1 : 0));
     }
     // 行数上限を優先するために必要な場合だけ，基準人数を超えるグループを許容する。
     return allowOverStandard ? caps : caps.map(function (n) { return Math.min(n, groupSize); });
@@ -1179,6 +1209,20 @@
     return label;
   }
 
+  function isNumberMode(mode) {
+    return mode === "number" || mode === "plainNumber";
+  }
+
+  function preferredGroupCount(total, groupSize, remainderMode) {
+    var fullGroupCount = Math.ceil(total / groupSize);
+    var onePersonRemainder = remainderMode !== "balanced" && total > groupSize && total % groupSize === 1;
+    return Math.max(1, fullGroupCount - (onePersonRemainder ? 1 : 0));
+  }
+
+  function displayColumnLabel(index, mode) {
+    return mode === "plainNumber" ? String(index + 1) : columnLabel(index);
+  }
+
   function renderAll() {
     appState.settings = normalizeSettings(appState.settings);
     appState.groups = createGroups();
@@ -1190,24 +1234,28 @@
 
   function renderHeader() {
     var s = appState.settings;
+    var numberMode = isNumberMode(s.mode);
+    var numberOnly = s.mode === "plainNumber";
     var groupCount = appState.groups.length;
-    var columns = s.mode === "number" ? Math.min(s.columnCount, groupCount || 1) : 0;
-    var maxNumber = s.mode === "number"
+    var columns = numberMode ? Math.min(s.columnCount, groupCount || 1) : 0;
+    var maxNumber = numberMode
       ? appState.groups.reduce(function (m, g) { return Math.max(m, g.row); }, 0)
       : "-";
     var capacityMax = appState.groups.reduce(function (m, g) { return Math.max(m, g.capacity || 0); }, 0);
     var limitText = "";
-    if (s.mode === "number" && hasRowLimitSettings(s)) {
-      var limits = buildColumnLimits(s, columns, Math.ceil(s.totalStudents / s.groupSize));
-      limitText = "・列上限" + limits.map(function (n, i) { return columnLabel(i) + n; }).join("/");
+    if (numberMode && hasRowLimitSettings(s)) {
+      var limits = buildColumnLimits(s, columns, preferredGroupCount(s.totalStudents, s.groupSize, s.remainderMode));
+      limitText = "・列上限" + limits.map(function (n, i) { return displayColumnLabel(i, s.mode) + "列" + n; }).join("/");
     }
 
-    els.modePill.textContent = s.mode === "number" ? (s.genderBalance ? "番号版・男女均等" : "番号版") : (s.genderBalance ? "果物版・男女均等" : "果物版");
+    els.modePill.textContent = numberOnly
+      ? (s.genderBalance ? "数字のみ・男女均等" : "数字のみ")
+      : (numberMode ? (s.genderBalance ? "番号版・男女均等" : "番号版") : (s.genderBalance ? "果物版・男女均等" : "果物版"));
     els.roomPill.textContent = "参加コード: " + ROOM_ID;
     els.roomInput.value = ROOM_ID;
     els.roomHelp.textContent = "現在の参加コード：「" + ROOM_ID + "」。教員から別のコードを案内された場合だけ入力し直してください。URL末尾に ?room=" + encodeURIComponent(ROOM_ID) + " を付けても同じクラスで開けます。";
     updateShareUrlText();
-    els.planPill.textContent = s.mode === "number"
+    els.planPill.textContent = numberMode
       ? s.totalStudents + "人・基準" + s.groupSize + "人組・" + s.columnCount + "列・" + groupCount + "組" + limitText
       : s.totalStudents + "人・果物" + groupCount + "種類";
     if (appState.firebaseReady) {
@@ -1221,14 +1269,23 @@
     }
     els.leadText.textContent = s.genderBalance
       ? "抽選は1回だけ行えます。男女均等モードのため，同意後に性別を選んでから抽選します。"
-      : (s.mode === "number"
+      : (numberMode
         ? "抽選は1回だけ行えます。同じ番号の人どうしで集まってください。"
         : "抽選は1回だけ行えます。同じ果物の人どうしで集まってください。");
 
-    if (s.mode === "number") {
-      var note = "この例では，列はA，B，C…，番号は1，2，3…です。人数が割り切れない場合は，最後の1組だけが極端に少なくならないよう複数グループに分散します。現在の番号上限は " + maxNumber + " です。";
+    if (numberMode) {
+      var note = numberOnly
+        ? "数字だけでグループ番号を付けます。配置図では各列に上から並べ，列の上限に達したら次の列へ続けます。現在のグループ番号上限は " + groupCount + " です。"
+        : "この例では，列はA，B，C…，番号は1，2，3…です。人数が割り切れない場合は，最後の1組だけが極端に少なくならないよう複数グループに分散します。現在の番号上限は " + maxNumber + " です。";
       if (capacityMax > s.groupSize) {
-        note += " ただし，行数上限を優先したため，一部に" + capacityMax + "人組が発生します。4人以下を厳守する場合は，列数を増やすか，各列の上限を増やしてください。";
+        if (groupCount === preferredGroupCount(s.totalStudents, s.groupSize, s.remainderMode)) {
+          note += " 人数の余りをまとめるため，最後の1組だけ" + capacityMax + "人になります。";
+        } else {
+          note += " 配置上限を優先したため，一部に" + capacityMax + "人組が発生します。4人以下を厳守する場合は，列数を増やすか，各列の上限を増やしてください。";
+        }
+      }
+      if (s.remainderMode === "balanced" && s.totalStudents % s.groupSize !== 0 && groupCount === preferredGroupCount(s.totalStudents, s.groupSize, s.remainderMode)) {
+        note += " 従来方式を選択中です。余り人数を均等に分けます（181人・4人基準なら4人組43、3人組3）。";
       }
       if (s.genderBalance) {
         note += " 男女均等モードでは，4人組は男性2・女性2を優先します。実際の男女比に偏りがある場合は，空いている枠へ割り当てます。";
@@ -1265,7 +1322,8 @@
     var byKey = {};
     appState.groups.forEach(function (g) { byKey[g.col + "-" + g.row] = g; });
 
-    var thead = '<tr><th>番号</th>' + columns.map(function (c) { return '<th>' + escapeHtml(c + "列") + '</th>'; }).join("") + '</tr>';
+    var rowHeading = s.mode === "plainNumber" ? "段" : "番号";
+    var thead = '<tr><th>' + rowHeading + '</th>' + columns.map(function (c) { return '<th>' + escapeHtml(c + "列") + '</th>'; }).join("") + '</tr>';
     var rows = "";
     for (var r = 1; r <= maxRow; r++) {
       rows += '<tr><th>' + r + '</th>';
@@ -1284,8 +1342,9 @@
     els.modeSelect.value = s.mode;
     els.totalStudentsInput.value = s.totalStudents;
     els.groupSizeInput.value = s.groupSize;
+    els.remainderModeSelect.value = s.remainderMode;
     els.columnCountInput.value = s.columnCount;
-    els.rowLimitInput.value = s.rowLimitPerColumn || "";
+    els.rowLimitInput.value = s.rowLimitPerColumn || (s.mode === "plainNumber" ? 10 : "");
     els.columnLimitsInput.value = s.columnRowLimits || "";
     els.autoDailyResetInput.checked = s.autoDailyReset;
     els.genderBalanceInput.checked = s.genderBalance;
@@ -1538,6 +1597,7 @@
     var oldMode = appState.settings.mode;
     var oldTotal = appState.settings.totalStudents;
     var oldSize = appState.settings.groupSize;
+    var oldRemainderMode = appState.settings.remainderMode;
     var oldColumns = appState.settings.columnCount;
     var oldRowLimit = appState.settings.rowLimitPerColumn;
     var oldColumnLimits = appState.settings.columnRowLimits;
@@ -1545,14 +1605,18 @@
     appState.settings.mode = els.modeSelect.value;
     appState.settings.totalStudents = clampInt(els.totalStudentsInput.value, 1, 600, 80);
     appState.settings.groupSize = clampInt(els.groupSizeInput.value, 1, 20, 4);
+    appState.settings.remainderMode = els.remainderModeSelect.value;
     appState.settings.columnCount = clampInt(els.columnCountInput.value, 1, 12, 4);
     appState.settings.rowLimitPerColumn = clampOptionalInt(els.rowLimitInput.value, 0, 30);
+    if (appState.settings.mode === "plainNumber" && !appState.settings.rowLimitPerColumn) {
+      appState.settings.rowLimitPerColumn = 10;
+    }
     appState.settings.columnRowLimits = els.columnLimitsInput.value.trim();
     appState.settings.autoDailyReset = !!els.autoDailyResetInput.checked;
     appState.settings.genderBalance = !!els.genderBalanceInput.checked;
     appState.settings = normalizeSettings(appState.settings);
 
-    var layoutChanged = oldMode !== appState.settings.mode || oldTotal !== appState.settings.totalStudents || oldSize !== appState.settings.groupSize || oldColumns !== appState.settings.columnCount || oldRowLimit !== appState.settings.rowLimitPerColumn || oldColumnLimits !== appState.settings.columnRowLimits || oldGenderBalance !== appState.settings.genderBalance;
+    var layoutChanged = oldMode !== appState.settings.mode || oldTotal !== appState.settings.totalStudents || oldSize !== appState.settings.groupSize || oldRemainderMode !== appState.settings.remainderMode || oldColumns !== appState.settings.columnCount || oldRowLimit !== appState.settings.rowLimitPerColumn || oldColumnLimits !== appState.settings.columnRowLimits || oldGenderBalance !== appState.settings.genderBalance;
     if (layoutChanged) {
       appState.settings.sessionId = String(Date.now());
       clearLocalDrawState();
