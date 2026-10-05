@@ -483,7 +483,7 @@
     <span class="pill" id="modePill">番号版</span>
     <span class="pill" id="planPill">80人・基準4人組・4列</span>
     <span class="pill" id="roomPill">ルーム: default-class</span>
-    <span class="pill warn" id="syncPill">ローカル版</span>
+    <span class="pill warn" id="syncPill">接続確認中</span>
   </div>
 
   <div class="roomBox">
@@ -536,7 +536,8 @@
   </section>
 
   <div class="actions">
-    <button id="drawButton" class="primary" type="button">抽選する</button>
+    <button id="drawButton" class="primary" type="button" disabled>抽選する</button>
+    <button id="reconnectButton" class="secondary hidden" type="button">再接続する</button>
     <button id="mapButton" class="secondary" type="button">配置図を表示</button>
   </div>
 
@@ -643,7 +644,7 @@
       折り返し方：「各列の組数をできるだけそろえる」と「1列の上限まで埋めてから次の列へ」を選べます（例：45組・5列・1列の上限10なら，前者は各列9組，後者は10・10・10・10・5組）。数字のみ版は列ごとに上から通し番号を振ります。<br>
       男女均等モードをオンにすると，参加者は同意後に男性・女性を選んでから抽選します。4人組では原則2名ずつの枠を優先しますが，実際の男女比に偏りがある場合は，空き枠を使って割り当てます。<br>
       参加コードを使うと，複数クラスを同時に分けて運用できます。同じ参加コードの参加者だけが同じ抽選データを共有します。初期表示は4桁で，必要に応じて6桁・8桁のコードも作成できます。<br>
-      Firebase未設定の場合もページ自体は動きますが，残数管理は端末ごとになります。授業本番で厳密に人数管理する場合はFirebase設定版を使ってください。
+      Firebase設定がある場合は，接続や共通データの確認に失敗すると抽選を停止します。通信状況を確認し，「再接続する」を押してください。設定が一部でもある場合はローカル版へ切り替わりません。Firebase設定をすべて空にした場合だけ端末ごとのローカル版として動作し，全員共通の人数管理は行いません。
     </div>
 
     <div class="adminActions">
@@ -741,6 +742,7 @@
     resultSub: document.getElementById("resultSub"),
     status: document.getElementById("status"),
     drawButton: document.getElementById("drawButton"),
+    reconnectButton: document.getElementById("reconnectButton"),
     mapButton: document.getElementById("mapButton"),
     metaText: document.getElementById("metaText"),
     list: document.getElementById("list"),
@@ -794,20 +796,28 @@
   async function init() {
     ensureDeviceId();
     renderAll();
-    await setupFirebaseIfPossible();
-    if (appState.firebaseReady) {
-      await loadSettingsFromFirebase();
-      await performFirebaseDailyResetIfNeeded();
-    } else {
-      performLocalDailyResetIfNeeded();
+    try {
+      await setupFirebaseIfPossible();
+      if (appState.firebaseReady) {
+        await loadSettingsFromFirebase();
+        await performFirebaseDailyResetIfNeeded();
+      } else if (!firebaseConnectionRequired()) {
+        performLocalDailyResetIfNeeded();
+      }
+      renderAll();
+      await restoreState();
+    } catch (e) {
+      console.warn("共通の抽選情報を確認できないため，抽選を停止します。", e);
+      appState.firebaseReady = false;
+      renderAll();
+      showConnectionRequired();
     }
-    renderAll();
-    await restoreState();
     bindEvents();
   }
 
   function bindEvents() {
     els.drawButton.addEventListener("click", draw);
+    els.reconnectButton.addEventListener("click", function () { window.location.reload(); });
     els.mapButton.addEventListener("click", function () {
       els.mapPanel.classList.toggle("show");
       els.mapButton.textContent = els.mapPanel.classList.contains("show") ? "配置図を隠す" : "配置図を表示";
@@ -915,15 +925,23 @@
   async function switchRoom(nextRoom) {
     ROOM_ID = nextRoom;
     localStorage.setItem(ROOM_STORAGE_KEY, ROOM_ID);
-    clearLocalDrawState();
     hideGenderPanel();
     hideRoomQr();
-    if (appState.firebaseReady) {
-      await loadSettingsFromFirebase();
-      await performFirebaseDailyResetIfNeeded();
+    try {
+      if (appState.firebaseReady) {
+        await loadSettingsFromFirebase();
+        await performFirebaseDailyResetIfNeeded();
+      } else if (!firebaseConnectionRequired()) {
+        clearLocalDrawState();
+      }
+      renderAll();
+      await restoreState();
+    } catch (e) {
+      console.warn("参加コードの抽選情報を確認できないため，抽選を停止します。", e);
+      appState.firebaseReady = false;
+      renderAll();
+      showConnectionRequired();
     }
-    renderAll();
-    await restoreState();
   }
 
   async function showRoomQr() {
@@ -1064,6 +1082,14 @@
     return !!(FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL && FIREBASE_CONFIG.appId);
   }
 
+  function firebaseConnectionRequired() {
+    // 設定が一部でもある場合は，共通管理に接続できるまで端末だけの抽選を許可しない。
+    var configured = FIREBASE_CONFIG && Object.keys(FIREBASE_CONFIG).some(function (key) {
+      return !!FIREBASE_CONFIG[key];
+    });
+    return !!configured && !appState.firebaseReady;
+  }
+
   async function setupFirebaseIfPossible() {
     if (!firebaseConfigIsReady()) {
       appState.firebaseReady = false;
@@ -1077,7 +1103,7 @@
       appState.firebaseFns = dbModule;
       appState.firebaseReady = true;
     } catch (e) {
-      console.warn("Firebase接続に失敗しました。ローカル版として動作します。", e);
+      console.warn("Firebase接続に失敗したため，抽選を停止します。", e);
       appState.firebaseReady = false;
     }
   }
@@ -1348,6 +1374,10 @@
       els.syncPill.textContent = "全員共通管理";
       els.syncPill.className = "pill ok";
       els.metaText.innerHTML = "同じ番号・果物に割り当てられる人数を，全員共通で管理します。左上を5回タップすると教員用管理画面が開きます。";
+    } else if (firebaseConnectionRequired()) {
+      els.syncPill.textContent = "接続待ち・抽選停止";
+      els.syncPill.className = "pill warn";
+      els.metaText.textContent = "全員共通の人数を確認できるまで抽選できません。通信状況を確認して再接続してください。左上を5回タップすると教員用管理画面が開きます。";
     } else {
       els.syncPill.textContent = "ローカル版";
       els.syncPill.className = "pill warn";
@@ -1523,6 +1553,10 @@
   }
 
   function showInitialResult() {
+    if (firebaseConnectionRequired()) {
+      showConnectionRequired();
+      return;
+    }
     els.resultSymbol.className = "resultSymbol";
     els.resultSymbol.textContent = "🎲";
     els.resultName.textContent = "待機中";
@@ -1531,9 +1565,28 @@
   }
 
   function setLockedUI(isLocked) {
+    if (firebaseConnectionRequired()) {
+      showConnectionRequired();
+      return;
+    }
     els.drawButton.disabled = isLocked;
     els.drawButton.textContent = isLocked ? "抽選済み" : (appState.settings.genderBalance ? "抽選前の確認へ進む" : "抽選する");
     els.status.textContent = isLocked ? "この端末では抽選済みです" : (appState.settings.genderBalance ? "男女均等モードです。抽選前に確認と性別選択があります。" : "まだ抽選していません");
+  }
+
+  function showConnectionRequired() {
+    hideGenderPanel();
+    els.resultSymbol.className = "resultSymbol";
+    els.resultSymbol.textContent = "⚠";
+    els.resultName.textContent = "抽選を停止しています";
+    els.resultSub.textContent = "全員共通の人数を確認できません。通信状況を確認し，「再接続する」を押してください。";
+    els.status.textContent = "接続できるまで抽選できません。保存済みの抽選結果は消していません。";
+    els.drawButton.disabled = true;
+    els.drawButton.textContent = "接続待ち";
+    els.reconnectButton.classList.remove("hidden");
+    [els.saveSettingsButton, els.resetDeviceButton, els.resetAllButton, els.countsButton].forEach(function (button) {
+      button.disabled = true;
+    });
   }
 
   function showResult(result) {
@@ -1559,6 +1612,10 @@
   }
 
   async function restoreState() {
+    if (firebaseConnectionRequired()) {
+      showConnectionRequired();
+      return;
+    }
     if (appState.firebaseReady) {
       var assignment = await getFirebaseAssignment();
       if (assignment) {
@@ -1579,6 +1636,10 @@
   }
 
   async function draw() {
+    if (firebaseConnectionRequired()) {
+      showConnectionRequired();
+      return;
+    }
     if (!appState.firebaseReady && localStorage.getItem(LOCK_KEY) === "1") return;
     var selectedGender = "";
     if (appState.settings.genderBalance) {
@@ -1615,7 +1676,13 @@
       }
     } catch (e) {
       console.error(e);
-      alert("抽選中にエラーが発生しました。通信状況を確認してください。ローカル版として再読み込みすると動く場合があります。");
+      if (firebaseConfigIsReady()) {
+        appState.firebaseReady = false;
+        renderHeader();
+        showConnectionRequired();
+        return;
+      }
+      alert("抽選中にエラーが発生しました。ページを再読み込みしてください。");
       var saved = null;
       try { saved = JSON.parse(localStorage.getItem(RESULT_KEY) || "null"); } catch (err) {}
       if (saved) showResult(saved); else showInitialResult();
@@ -1888,6 +1955,11 @@
   }
 
   async function renderCounts() {
+    if (firebaseConnectionRequired()) {
+      els.countsSummary.textContent = "接続できないため，共通の抽選状況を確認できません。再接続してください。";
+      els.countsGrid.innerHTML = "";
+      return;
+    }
     var counts = {};
     if (appState.firebaseReady) {
       var f = appState.firebaseFns;
