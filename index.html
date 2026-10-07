@@ -685,7 +685,7 @@
   };
   // サーバーを公開・既存クラスを移行した後，そのHTTPS URLを設定します。
   // 未設定では共有データを書き換えません。Firebase未設定のローカル版は従来どおりです。
-  var API_BASE = "";
+  var API_BASE = "https://class-picker-api.mlab-tools.workers.dev";
   var TEACHER_SESSION_KEY = "group_picker_teacher_session_v1";
   var teacherSession = null;
   try { teacherSession = JSON.parse(sessionStorage.getItem(TEACHER_SESSION_KEY) || "null"); } catch (e) {}

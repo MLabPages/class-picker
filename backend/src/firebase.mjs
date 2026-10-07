@@ -2,7 +2,7 @@ import { base64url } from "./crypto.mjs";
 
 // No user-supplied URL, query, or path is forwarded to Firebase.
 export class FirebaseStore {
-  constructor(env, fetcher = fetch) {
+  constructor(env, fetcher = (input, init) => fetch(input, init)) {
     this.env = env; this.fetcher = fetcher; this.accessToken = null;
     const url = new URL(env.FIREBASE_DATABASE_URL);
     if (url.protocol !== "https:" || !/^[a-z0-9-]+(?:\.[a-z0-9-]+)?\.(?:firebasedatabase\.app|firebaseio\.com)$/.test(url.hostname) || url.port || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("Invalid database configuration");
@@ -22,8 +22,8 @@ export class FirebaseStore {
     const body = base64url(enc.encode(JSON.stringify({ iss: account.client_email, scope: "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/firebase.database", aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 })));
     const input = head + "." + body;
     const assertion = input + "." + base64url(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, enc.encode(input)));
-    const res = await this.fetcher("https://oauth2.googleapis.com/token", { method: "POST", body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }), redirect: "error", signal: AbortSignal.timeout(10000) });
-    if (!res.ok) throw new Error("Firebase authentication failed");
+    const res = await this.fetcher("https://oauth2.googleapis.com/token", { method: "POST", body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }), redirect: "manual", signal: AbortSignal.timeout(10000) });
+    if (res.status >= 300 && res.status < 400 || !res.ok) throw new Error("Firebase authentication failed");
     let data;
     try { data = await res.json(); } catch { throw new Error("Firebase authentication failed"); }
     if (typeof data.access_token !== "string" || !Number.isFinite(data.expires_in)) throw new Error("Firebase authentication failed");
@@ -37,7 +37,8 @@ export class FirebaseStore {
     const headers = { Authorization: "Bearer " + await this.token(), "Content-Type": "application/json" };
     if (method === "GET") headers["X-Firebase-ETag"] = "true";
     if (etag) headers["if-match"] = etag;
-    const res = await this.fetcher(this.url + "/" + path.split("/").map(encodeURIComponent).join("/") + ".json", { method, headers, body: method === "GET" ? undefined : JSON.stringify(value), redirect: "error", signal: AbortSignal.timeout(10000) });
+    const res = await this.fetcher(this.url + "/" + path.split("/").map(encodeURIComponent).join("/") + ".json", { method, headers, body: method === "GET" ? undefined : JSON.stringify(value), redirect: "manual", signal: AbortSignal.timeout(10000) });
+    if (res.status >= 300 && res.status < 400) throw new Error("Firebase redirect refused");
     if (res.status === 412) return { conflict: true };
     if (!res.ok) throw new Error("Firebase request failed");
     return { value: await res.json(), etag: res.headers.get("etag") };

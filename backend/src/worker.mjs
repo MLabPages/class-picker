@@ -188,6 +188,7 @@ export function makeWorker(createStore = env => new FirebaseStore(env)) {
         return reply({ settings: cleanSettings(room.settings) });
       } catch (error) {
         // Never return Firebase errors, request bodies, management codes, or credentials.
+        if (!(error instanceof HttpError)) console.error("class-picker-api error", error?.name, String(error?.message || "").slice(0, 200));
         return reply({ error: error instanceof HttpError ? error.message : "サーバーに接続できません。保存データを確認してから再試行してください。" }, error instanceof HttpError ? error.status : 503);
       }
     }
