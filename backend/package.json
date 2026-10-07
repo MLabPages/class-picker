@@ -1,0 +1,13 @@
+{
+  "name": "class-picker-admin-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check src/worker.mjs && node --check src/firebase.mjs",
+    "build": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": { "wrangler": "4.148.0" },
+  "overrides": { "sharp": "0.35.5" }
+}

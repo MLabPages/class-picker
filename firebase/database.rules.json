@@ -1,0 +1,14 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$room": {
+        "settings": { ".read": true },
+        "groupCounts": { ".read": true },
+        "groupStats": { ".read": true },
+        "assignments": { "$device": { ".read": true } }
+      }
+    }
+  }
+}

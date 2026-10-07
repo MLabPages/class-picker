@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "class-picker-api",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-07",
+  "workers_dev": true,
+  "vars": {
+    "ALLOWED_ORIGIN": "https://mlabpages.github.io",
+    "FIREBASE_DATABASE_URL": "https://class-group-picker-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "FIREBASE_PROJECT_ID": "class-group-picker",
+    "REGISTRATION_ENABLED": "true"
+  },
+  "ratelimits": [
+    { "name": "AUTH_LIMIT", "namespace_id": "202610071", "simple": { "limit": 10, "period": 60 } },
+    { "name": "OP_LIMIT", "namespace_id": "202610072", "simple": { "limit": 60, "period": 60 } },
+    { "name": "DAILY_LIMIT", "namespace_id": "202610073", "simple": { "limit": 1000, "period": 60 } }
+  ]
+}

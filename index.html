@@ -558,7 +558,13 @@
     <div class="adminGrid">
       <div class="field">
         <label for="adminCode">管理コード</label>
-        <input id="adminCode" type="password">
+        <input id="adminCode" type="password" autocomplete="off" spellcheck="false">
+        <div class="fieldHint" id="teacherStatus">管理コードの確認は8時間有効です。担当するクラスを切り替えても再入力は不要です。</div>
+        <div class="buttonRow">
+          <button id="createTeacherButton" class="secondary smallBtn" type="button">初めて使う：管理コードを作成</button>
+          <button id="signOutTeacherButton" class="secondary smallBtn" type="button">管理確認を終了</button>
+        </div>
+        <input id="newTeacherCode" class="hidden" type="text" readonly aria-label="新しい教員用管理コード">
       </div>
       <div class="field">
         <label for="modeSelect">表示方式</label>
@@ -677,6 +683,12 @@
     messagingSenderId: "756663742740",
     appId: "1:756663742740:web:fae503b097b9c814475201"
   };
+  // サーバーを公開・既存クラスを移行した後，そのHTTPS URLを設定します。
+  // 未設定では共有データを書き換えません。Firebase未設定のローカル版は従来どおりです。
+  var API_BASE = "";
+  var TEACHER_SESSION_KEY = "group_picker_teacher_session_v1";
+  var teacherSession = null;
+  try { teacherSession = JSON.parse(sessionStorage.getItem(TEACHER_SESSION_KEY) || "null"); } catch (e) {}
   var DEFAULT_ROOM_ID = "0000";
   var LEGACY_DEFAULT_ROOM_ID = "00000000";
   var ROOM_STORAGE_KEY = "group_picker_room_id_v1";
@@ -723,6 +735,7 @@
     db: null,
     firebaseFns: null,
     firebaseReady: false,
+    roomMissing: false,
     countsVisible: false,
     countsTimer: null,
     countsLoading: false
@@ -752,6 +765,10 @@
     adminPanel: document.getElementById("adminPanel"),
     hotspot: document.getElementById("secretHotspot"),
     adminCode: document.getElementById("adminCode"),
+    teacherStatus: document.getElementById("teacherStatus"),
+    createTeacherButton: document.getElementById("createTeacherButton"),
+    signOutTeacherButton: document.getElementById("signOutTeacherButton"),
+    newTeacherCode: document.getElementById("newTeacherCode"),
     modeSelect: document.getElementById("modeSelect"),
     totalStudentsInput: document.getElementById("totalStudentsInput"),
     groupSizeInput: document.getElementById("groupSizeInput"),
@@ -816,6 +833,16 @@
   }
 
   function bindEvents() {
+    updateTeacherStatus();
+    els.createTeacherButton.addEventListener("click", function () { runAdminAction(createTeacher); });
+    els.signOutTeacherButton.addEventListener("click", function () {
+      teacherSession = null;
+      try { sessionStorage.removeItem(TEACHER_SESSION_KEY); } catch (e) {}
+      els.adminCode.value = "";
+      els.newTeacherCode.value = "";
+      els.newTeacherCode.classList.add("hidden");
+      updateTeacherStatus();
+    });
     els.drawButton.addEventListener("click", draw);
     els.reconnectButton.addEventListener("click", function () { window.location.reload(); });
     els.mapButton.addEventListener("click", function () {
@@ -862,11 +889,11 @@
       els.hotspot.addEventListener("touchend", handleAdminTap);
     }
 
-    els.generateRoomCodeButton.addEventListener("click", generateAndApplyRoomCode);
-    els.copyRoomUrlButton.addEventListener("click", copyRoomShareUrl);
-    els.saveSettingsButton.addEventListener("click", saveSettingsFromAdmin);
-    els.resetDeviceButton.addEventListener("click", resetThisDeviceFromAdmin);
-    els.resetAllButton.addEventListener("click", resetAllFromAdmin);
+    els.generateRoomCodeButton.addEventListener("click", function () { runAdminAction(generateAndApplyRoomCode); });
+    els.copyRoomUrlButton.addEventListener("click", function () { runAdminAction(copyRoomShareUrl); });
+    els.saveSettingsButton.addEventListener("click", function () { runAdminAction(saveSettingsFromAdmin); });
+    els.resetDeviceButton.addEventListener("click", function () { runAdminAction(resetThisDeviceFromAdmin); });
+    els.resetAllButton.addEventListener("click", function () { runAdminAction(resetAllFromAdmin); });
     els.countsButton.addEventListener("click", toggleCounts);
     [
       els.modeSelect, els.totalStudentsInput, els.groupSizeInput, els.remainderModeSelect,
@@ -878,6 +905,7 @@
   }
 
   function todayKey() {
+    if (firebaseIsConfigured()) return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
     var d = new Date();
     var y = d.getFullYear();
     var m = String(d.getMonth() + 1).padStart(2, "0");
@@ -930,13 +958,16 @@
     try {
       if (appState.firebaseReady) {
         await loadSettingsFromFirebase();
+        if (nextRoom !== ROOM_ID) return;
         await performFirebaseDailyResetIfNeeded();
       } else if (!firebaseConnectionRequired()) {
         clearLocalDrawState();
       }
+      if (nextRoom !== ROOM_ID) return;
       renderAll();
       await restoreState();
     } catch (e) {
+      if (nextRoom !== ROOM_ID) return;
       console.warn("参加コードの抽選情報を確認できないため，抽選を停止します。", e);
       appState.firebaseReady = false;
       renderAll();
@@ -977,7 +1008,7 @@
   }
 
   async function generateAndApplyRoomCode() {
-    if (!verifyAdminCode()) return;
+    if (!await authorizeAdmin()) return;
     var digits = clampInt(els.codeDigitsSelect.value, 4, 8, 4);
     var nextCode = generateRoomCode(digits);
     var guard = 0;
@@ -985,6 +1016,7 @@
       nextCode = generateRoomCode(digits);
       guard += 1;
     }
+    if (firebaseIsConfigured()) await apiRequest("/api/rooms/create", { roomId: nextCode, settings: settingsForServer(appState.settings) }, true);
     els.roomInput.value = nextCode;
     await applyRoomFromInput();
     updateShareUrlText();
@@ -1004,7 +1036,7 @@
   }
 
   async function copyRoomShareUrl() {
-    if (!verifyAdminCode()) return;
+    if (!await authorizeAdmin()) return;
     var url = buildRoomShareUrl();
     try {
       await navigator.clipboard.writeText(url);
@@ -1059,7 +1091,8 @@
     out.columnRowLimits = typeof out.columnRowLimits === "string" ? out.columnRowLimits : "";
     out.autoDailyReset = !!out.autoDailyReset;
     out.genderBalance = !!out.genderBalance;
-    out.resetCode = out.resetCode || "reset2026";
+    if (firebaseIsConfigured()) delete out.resetCode;
+    else out.resetCode = out.resetCode || "reset2026";
     out.lastResetDate = out.lastResetDate || todayKey();
     out.sessionId = out.sessionId || String(Date.now());
     return out;
@@ -1080,6 +1113,10 @@
 
   function firebaseConfigIsReady() {
     return !!(FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL && FIREBASE_CONFIG.appId);
+  }
+
+  function firebaseIsConfigured() {
+    return !!FIREBASE_CONFIG && Object.keys(FIREBASE_CONFIG).some(function (key) { return !!FIREBASE_CONFIG[key]; });
   }
 
   function firebaseConnectionRequired() {
@@ -1113,30 +1150,29 @@
   }
 
   async function loadSettingsFromFirebase() {
+    var room = ROOM_ID;
     var f = appState.firebaseFns;
-    var ref = f.ref(appState.db, dbPath("settings"));
-    var snap = await f.get(ref);
+    var snap = await f.get(f.ref(appState.db, "rooms/" + room + "/settings"));
+    if (room !== ROOM_ID) return;
+    appState.roomMissing = !snap.exists();
     if (snap.exists()) {
       appState.settings = normalizeSettings(snap.val());
       saveLocalSettings(appState.settings);
     } else {
-      appState.settings = normalizeSettings(appState.settings);
-      await f.set(ref, appState.settings);
-      saveLocalSettings(appState.settings);
+      // 新しいクラスは教員がサーバーで作成する。学生による自動作成はしない。
+      appState.settings = normalizeSettings(DEFAULT_SETTINGS);
     }
-  }
-
-  async function saveSettingsToFirebase() {
-    if (!appState.firebaseReady) return;
-    var f = appState.firebaseFns;
-    await f.set(f.ref(appState.db, dbPath("settings")), appState.settings);
   }
 
   async function performFirebaseDailyResetIfNeeded() {
     var s = appState.settings;
-    if (!s.autoDailyReset) return;
-    if (s.lastResetDate === todayKey()) return;
-    await resetAllAssignments("date");
+    if (appState.roomMissing || !s.autoDailyReset || s.lastResetDate === todayKey()) return;
+    var room = ROOM_ID;
+    var response = await apiRequest("/api/daily-reset", { roomId: room }, false);
+    if (room === ROOM_ID) {
+      appState.settings = normalizeSettings(response.settings);
+      saveLocalSettings(appState.settings);
+    }
   }
 
   function performLocalDailyResetIfNeeded() {
@@ -1565,6 +1601,13 @@
   }
 
   function setLockedUI(isLocked) {
+    if (appState.firebaseReady && appState.roomMissing) {
+      els.resultName.textContent = "参加コードを確認してください";
+      els.resultSub.textContent = "このクラスはまだ作成されていません。教員は管理画面で設定を保存して作成してください。";
+      els.drawButton.disabled = true;
+      els.status.textContent = "教員によるクラス作成を待っています。";
+      return;
+    }
     if (firebaseConnectionRequired()) {
       showConnectionRequired();
       return;
@@ -1612,12 +1655,14 @@
   }
 
   async function restoreState() {
+    var restoreRoom = ROOM_ID;
     if (firebaseConnectionRequired()) {
       showConnectionRequired();
       return;
     }
     if (appState.firebaseReady) {
       var assignment = await getFirebaseAssignment();
+      if (restoreRoom !== ROOM_ID) return;
       if (assignment) {
         showResult(assignment);
         saveLocalResult(assignment);
@@ -1636,6 +1681,8 @@
   }
 
   async function draw() {
+    if (appState.roomMissing) return;
+    var drawRoom = ROOM_ID;
     if (firebaseConnectionRequired()) {
       showConnectionRequired();
       return;
@@ -1655,6 +1702,7 @@
     try {
       if (appState.firebaseReady) {
         var existing = await getFirebaseAssignment();
+        if (drawRoom !== ROOM_ID) return;
         if (existing) {
           showResult(existing);
           return;
@@ -1665,7 +1713,7 @@
           showInitialResult();
           return;
         }
-        await setFirebaseAssignment(result);
+        if (drawRoom !== ROOM_ID) return;
         saveLocalResult(result);
         showResult(result);
       } else {
@@ -1675,6 +1723,7 @@
         showResult(localResult);
       }
     } catch (e) {
+      if (drawRoom !== ROOM_ID) return;
       console.error(e);
       if (firebaseConfigIsReady()) {
         appState.firebaseReady = false;
@@ -1728,105 +1777,22 @@
   }
 
   async function drawWithFirebaseCapacity(selectedGender) {
-    if (appState.settings.genderBalance && selectedGender) {
-      var balanced = await drawWithFirebaseGenderCapacity(selectedGender, false);
-      if (balanced) return balanced;
-      // 実際の男女比が偏っている場合，性別枠だけを理由に抽選不能にならないよう，空いている総枠へ割り当てる。
-      var relaxed = await drawWithFirebaseGenderCapacity(selectedGender, true);
-      if (relaxed) return relaxed;
-      return null;
-    }
-
-    var f = appState.firebaseFns;
-    // 空きのある組のうち，今の人数が少ない組から順に試す（同じ人数ならランダム）。
-    // 欠席で空いた枠が一部の組に偏らず，後日抽選した人も人数の少ない組に入る。
-    var countsSnap = await f.get(f.ref(appState.db, dbPath("groupCounts")));
-    var counts = (countsSnap.exists() && countsSnap.val()) || {};
-    var candidates = orderByFewestMembers(appState.groups, function (group) {
-      var now = counts[safeKey(group.id)] || 0;
-      return [now >= group.capacity ? 1 : 0, now];
-    });
-    for (var i = 0; i < candidates.length; i++) {
-      var g = candidates[i];
-      var countRef = f.ref(appState.db, dbPath("groupCounts/" + safeKey(g.id)));
-      var tx = await f.runTransaction(countRef, function (current) {
-        var now = current || 0;
-        if (now >= g.capacity) return;
-        return now + 1;
-      });
-      if (tx.committed) {
-        return g;
-      }
-    }
-    return null;
-  }
-
-  async function drawWithFirebaseGenderCapacity(selectedGender, relaxed) {
-    var f = appState.firebaseFns;
-    // 入れる組のうち，今の人数が少ない組から順に試す。
-    // 人数が同じなら同じ性別が少ない組を先にし，それも同じならランダムにする。
-    var statsSnap = await f.get(f.ref(appState.db, dbPath("groupStats")));
-    var stats = (statsSnap.exists() && statsSnap.val()) || {};
-    var candidates = orderByFewestMembers(appState.groups, function (group) {
-      var stat = stats[safeKey(group.id)] || {};
-      var total = stat.total || 0;
-      var sameGender = stat[selectedGender] || 0;
-      var open = total < group.capacity && (relaxed || sameGender < genderCapForGroup(group));
-      return [open ? 0 : 1, total, sameGender];
-    });
-    for (var i = 0; i < candidates.length; i++) {
-      var g = candidates[i];
-      var statRef = f.ref(appState.db, dbPath("groupStats/" + safeKey(g.id)));
-      var tx = await f.runTransaction(statRef, function (current) {
-        var stat = current || { total: 0, male: 0, female: 0 };
-        stat.total = stat.total || 0;
-        stat.male = stat.male || 0;
-        stat.female = stat.female || 0;
-        if (stat.total >= g.capacity) return;
-        if (!relaxed && stat[selectedGender] >= genderCapForGroup(g)) return;
-        stat.total += 1;
-        stat[selectedGender] += 1;
-        return stat;
-      });
-      if (tx.committed) {
-        var result = Object.assign({}, g);
-        result.assignedGender = selectedGender;
-        result.genderRelaxed = !!relaxed;
-        return result;
-      }
-    }
-    return null;
-  }
-
-  // keysOf が返す値の小さい順に並べる。値がすべて同じ組どうしの順番はランダムにする。
-  function orderByFewestMembers(groups, keysOf) {
-    return groups.map(function (group) {
-      return { group: group, keys: keysOf(group), tie: Math.random() };
-    }).sort(function (a, b) {
-      for (var k = 0; k < a.keys.length; k++) {
-        if (a.keys[k] !== b.keys[k]) return a.keys[k] - b.keys[k];
-      }
-      return a.tie - b.tie;
-    }).map(function (item) { return item.group; });
+    var response = await apiRequest("/api/draw", {
+      roomId: ROOM_ID, deviceId: getDeviceId(), gender: selectedGender || "", sessionId: appState.settings.sessionId
+    }, false);
+    return response.result;
   }
 
   async function getFirebaseAssignment() {
+    var room = ROOM_ID;
+    var sessionId = appState.settings.sessionId;
     var f = appState.firebaseFns;
     var snap = await f.get(f.ref(appState.db, dbPath("assignments/" + getDeviceId())));
+    if (room !== ROOM_ID) return null;
     if (!snap.exists()) return null;
     var value = snap.val();
-    if (value && value.sessionId === appState.settings.sessionId) return value.result;
+    if (value && value.sessionId === sessionId) return value.result;
     return null;
-  }
-
-  async function setFirebaseAssignment(result) {
-    var f = appState.firebaseFns;
-    await f.set(f.ref(appState.db, dbPath("assignments/" + getDeviceId())), {
-      result: result,
-      sessionId: appState.settings.sessionId,
-      date: todayKey(),
-      createdAt: Date.now()
-    });
   }
 
   function saveLocalResult(result) {
@@ -1841,91 +1807,148 @@
     localStorage.removeItem(LOCK_DATE_KEY);
   }
 
-  function verifyAdminCode() {
-    if (els.adminCode.value.trim() !== appState.settings.resetCode) {
-      alert("管理コードが違います。");
-      return false;
+  function updateTeacherStatus() {
+    els.createTeacherButton.classList.toggle("hidden", !firebaseIsConfigured());
+    els.signOutTeacherButton.classList.toggle("hidden", !firebaseIsConfigured());
+    var active = teacherSession && teacherSession.expiresAt > Date.now();
+    els.teacherStatus.textContent = active
+      ? "管理コード確認済み（8時間有効）。担当クラスを切り替えて使えます。共有端末では使用後に「管理確認を終了」を押してください。"
+      : (firebaseIsConfigured() ? "管理コードの確認は8時間有効です。担当クラスを切り替えても再入力は不要です。" : "ローカル版では，この端末の管理コードで操作します。");
+  }
+
+  function rememberTeacherSession(response) {
+    teacherSession = { token: response.token, expiresAt: response.expiresAt };
+    try { sessionStorage.setItem(TEACHER_SESSION_KEY, JSON.stringify(teacherSession)); } catch (e) {}
+    els.adminCode.value = "";
+    updateTeacherStatus();
+  }
+
+  async function apiRequest(path, body, needsTeacher) {
+    if (!API_BASE) throw new Error("共有管理サーバーが未設定です。教員に確認してください。");
+    var endpoint = new URL(API_BASE);
+    var localDev = (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost")
+      && endpoint.hostname === window.location.hostname && endpoint.protocol === "http:";
+    if (endpoint.protocol !== "https:" && !localDev) throw new Error("共有管理サーバーにはHTTPSが必要です。");
+    var headers = { "Content-Type": "application/json" };
+    if (needsTeacher) {
+      if (!teacherSession || teacherSession.expiresAt <= Date.now()) throw new Error("管理コードの確認期限が切れました。再入力してください。");
+      headers.Authorization = "Bearer " + teacherSession.token;
     }
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 30000);
+    try {
+      var response = await fetch(endpoint.origin + path, { method: "POST", headers: headers, body: JSON.stringify(body), credentials: "omit", redirect: "error", signal: controller.signal });
+      var data = await response.json();
+      if (!response.ok) {
+        if (response.status === 401 && needsTeacher) {
+          teacherSession = null;
+          try { sessionStorage.removeItem(TEACHER_SESSION_KEY); } catch (e) {}
+          updateTeacherStatus();
+        }
+        throw new Error(data.error || "操作できませんでした。");
+      }
+      return data;
+    } finally { clearTimeout(timer); }
+  }
+
+  async function authorizeAdmin() {
+    if (!firebaseIsConfigured()) {
+      if (els.adminCode.value.trim() !== appState.settings.resetCode) { alert("管理コードが違います。"); return false; }
+      return true;
+    }
+    var code = els.adminCode.value.trim();
+    // 別の教員のコードが入力された場合は，保存済みの確認より新しい入力を優先する。
+    if (!code && teacherSession && teacherSession.expiresAt > Date.now()) return true;
+    var response = await apiRequest("/api/session", { code: code }, false);
+    rememberTeacherSession(response);
     return true;
   }
 
+  async function createTeacher() {
+    if (!confirm("新しい教員用管理コードを作成します。既存の参加コードは自動では引き継がれません。表示された管理コードを安全な場所に保存してください。")) return;
+    var response = await apiRequest("/api/teachers", {}, false);
+    rememberTeacherSession(response);
+    els.newTeacherCode.value = response.code;
+    els.newTeacherCode.classList.remove("hidden");
+    alert("教員用管理コードを作成しました。表示されたコードを保存してください。このコードで複数クラスを管理できます。");
+  }
+
+  async function runAdminAction(action) {
+    var buttons = [els.saveSettingsButton, els.resetDeviceButton, els.resetAllButton, els.generateRoomCodeButton, els.createTeacherButton];
+    if (runAdminAction.busy) return;
+    runAdminAction.busy = true;
+    buttons.forEach(function (b) { b.disabled = true; });
+    try { await action(); }
+    catch (e) { alert(e.message || "操作に失敗しました。保存済みデータは消していません。"); }
+    finally {
+      runAdminAction.busy = false;
+      buttons.forEach(function (b) { b.disabled = firebaseConnectionRequired() && b !== els.createTeacherButton && b !== els.generateRoomCodeButton; });
+    }
+  }
+
+  function settingsForServer(settings) {
+    var keys = ["mode", "totalStudents", "groupSize", "remainderMode", "columnFillMode", "columnCount", "rowLimitPerColumn", "columnRowLimits", "autoDailyReset", "genderBalance"];
+    var out = {};
+    keys.forEach(function (key) { out[key] = settings[key]; });
+    return out;
+  }
+
   async function saveSettingsFromAdmin() {
-    if (!verifyAdminCode()) return;
+    if (!await authorizeAdmin()) return;
+    var room = ROOM_ID;
     var previous = normalizeSettings(appState.settings);
     var next = readAdminFormSettings();
     var layoutKeys = ["mode", "totalStudents", "groupSize", "remainderMode", "columnFillMode", "columnCount", "rowLimitPerColumn", "columnRowLimits", "genderBalance"];
     var layoutChanged = layoutKeys.some(function (key) { return previous[key] !== next[key]; });
+    if (firebaseIsConfigured()) {
+      var response = await apiRequest(appState.roomMissing ? "/api/rooms/create" : "/api/rooms/settings", { roomId: room, settings: settingsForServer(next) }, true);
+      if (room !== ROOM_ID) return;
+      next = normalizeSettings(response.settings);
+      layoutChanged = !!response.reset;
+      appState.roomMissing = false;
+    } else if (layoutChanged) next.sessionId = String(Date.now());
+    // 確認・保存に成功するまで，設定と端末の結果を変更しない。
     appState.settings = next;
-
-    if (layoutChanged) {
-      appState.settings.sessionId = String(Date.now());
-      clearLocalDrawState();
-      if (appState.firebaseReady) await resetAllAssignments("settings");
-    }
+    if (layoutChanged) clearLocalDrawState();
     saveLocalSettings(appState.settings);
-    if (appState.firebaseReady) await saveSettingsToFirebase();
     renderAll();
     await restoreState();
     alert(layoutChanged ? "設定を保存し，抽選状況をリセットしました。" : "設定を保存しました。");
   }
 
   async function resetThisDeviceFromAdmin() {
-    if (!verifyAdminCode()) return;
-    clearLocalDrawState();
-    if (appState.firebaseReady) {
-      var f = appState.firebaseFns;
-      var assignment = await getFirebaseAssignment();
-      if (assignment) await decrementFirebaseCount(assignment);
-      await f.remove(f.ref(appState.db, dbPath("assignments/" + getDeviceId())));
+    if (!await authorizeAdmin()) return;
+    var room = ROOM_ID;
+    var response = null;
+    if (firebaseIsConfigured()) response = await apiRequest("/api/rooms/reset-device", { roomId: room, deviceId: getDeviceId() }, true);
+    if (room !== ROOM_ID) return;
+    if (response) {
+      appState.settings = normalizeSettings(response.settings);
+      saveLocalSettings(appState.settings);
+      renderAll();
     }
+    clearLocalDrawState();
     showInitialResult();
     alert("この端末の抽選状態をリセットしました。");
   }
 
-  async function decrementFirebaseCount(result) {
-    var f = appState.firebaseFns;
-    if (result && result.assignedGender) {
-      var statRef = f.ref(appState.db, dbPath("groupStats/" + safeKey(result.id)));
-      await f.runTransaction(statRef, function (current) {
-        var stat = current || { total: 0, male: 0, female: 0 };
-        stat.total = Math.max(0, (stat.total || 0) - 1);
-        if (result.assignedGender === "male") stat.male = Math.max(0, (stat.male || 0) - 1);
-        if (result.assignedGender === "female") stat.female = Math.max(0, (stat.female || 0) - 1);
-        return stat;
-      });
-    } else {
-      var countRef = f.ref(appState.db, dbPath("groupCounts/" + safeKey(result.id)));
-      await f.runTransaction(countRef, function (current) {
-        var now = current || 0;
-        return Math.max(0, now - 1);
-      });
-    }
-  }
-
   async function resetAllFromAdmin() {
-    if (!verifyAdminCode()) return;
-    var ok = confirm("全員分の抽選状況をリセットします。よろしいですか？");
-    if (!ok) return;
-    await resetAllAssignments("manual");
+    if (!await authorizeAdmin()) return;
+    if (!confirm("全員分の抽選状況をリセットします。よろしいですか？")) return;
+    var room = ROOM_ID;
+    if (firebaseIsConfigured()) {
+      var response = await apiRequest("/api/rooms/reset", { roomId: room }, true);
+      if (room !== ROOM_ID) return;
+      appState.settings = normalizeSettings(response.settings);
+    } else {
+      appState.settings.lastResetDate = todayKey();
+      appState.settings.sessionId = String(Date.now());
+    }
+    saveLocalSettings(appState.settings);
     clearLocalDrawState();
     renderAll();
     showInitialResult();
-    alert(appState.firebaseReady ? "全員分の抽選状況をリセットしました。" : "この端末の抽選状態をリセットしました。Firebase未設定のため，他の端末はリセットされません。");
-  }
-
-  async function resetAllAssignments(reason) {
-    appState.settings.lastResetDate = todayKey();
-    appState.settings.sessionId = String(Date.now());
-    saveLocalSettings(appState.settings);
-    if (!appState.firebaseReady) {
-      clearLocalDrawState();
-      return;
-    }
-    var f = appState.firebaseFns;
-    await f.remove(f.ref(appState.db, dbPath("assignments")));
-    await f.remove(f.ref(appState.db, dbPath("groupCounts")));
-    await f.remove(f.ref(appState.db, dbPath("groupStats")));
-    await f.set(f.ref(appState.db, dbPath("settings")), appState.settings);
+    alert(firebaseIsConfigured() ? "全員分の抽選状況をリセットしました。" : "この端末の抽選状態をリセットしました。Firebase未設定のため，他の端末はリセットされません。");
   }
 
   async function toggleCounts() {
@@ -2015,7 +2038,7 @@
 
   function ensureDeviceId() {
     if (!localStorage.getItem(DEVICE_ID_KEY)) {
-      var id = "d-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 11);
+      var id = "d-" + (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : Array.from(window.crypto.getRandomValues(new Uint8Array(16))).map(function (n) { return n.toString(16).padStart(2, "0"); }).join(""));
       localStorage.setItem(DEVICE_ID_KEY, id);
     }
   }

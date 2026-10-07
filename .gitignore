@@ -1,0 +1,6 @@
+backend/node_modules/
+backend/.wrangler/
+backend/.dev.vars*
+backend/*service-account*.json
+backend/*management-code*.txt
+*-debug.log
