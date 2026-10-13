@@ -6,9 +6,14 @@ export function decode64(value) {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("Invalid encoding");
   return Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
 }
-export function randomCode() { return "CP-" + base64url(crypto.getRandomValues(new Uint8Array(24))); }
+export function randomCode() {
+  const value = new Uint32Array(1), range = 100000000;
+  // 8桁の各数値を同じ確率で選ぶ。先頭の0も入力できるよう文字列で返す。
+  do { crypto.getRandomValues(value); } while (value[0] >= Math.floor(4294967296 / range) * range);
+  return String(value[0] % range).padStart(8, "0");
+}
 export async function teacherId(code) {
-  if (typeof code !== "string" || !/^CP-[A-Za-z0-9_-]{32}$/.test(code)) return null;
+  if (typeof code !== "string" || !/^(?:[0-9]{8}|CP-[A-Za-z0-9_-]{32})$/.test(code)) return null;
   return base64url(await crypto.subtle.digest("SHA-256", encoder.encode("class-picker-teacher-v1:" + code)));
 }
 async function signingKey(secret) {

@@ -105,8 +105,16 @@ export function makeWorker(createStore = env => new FirebaseStore(env)) {
             return reply({ code, ...await issueSession(id, env.ADMIN_SIGNING_KEY) }, 201);
           }
           exactKeys(body, ["code"]);
-          const id = await teacherId(body.code), record = id && await store.get("control/teachers/" + id);
+          const codeId = await teacherId(body.code), record = codeId && await store.get("control/teachers/" + codeId);
           requireCondition(record && record.disabled === false, 401, "管理コードが違うか，無効になっています。");
+          let id = codeId;
+          if (Object.hasOwn(record, "teacherId")) {
+            requireCondition(typeof record.teacherId === "string" && /^[A-Za-z0-9_-]{43}$/.test(record.teacherId), 401, "管理コードが違うか，無効になっています。");
+            const teacher = await store.get("control/teachers/" + record.teacherId);
+            requireCondition(teacher?.disabled === false && !Object.hasOwn(teacher, "teacherId"), 401, "管理コードが違うか，無効になっています。");
+            // 入力用コードを既存の教員に結び付け，クラス所有者や抽選結果は変えない。
+            id = record.teacherId;
+          }
           return reply(await issueSession(id, env.ADMIN_SIGNING_KEY));
         }
         requireCondition(validKey(body.roomId), 400, "参加コードが正しくありません。");

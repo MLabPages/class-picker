@@ -558,7 +558,7 @@
     <div class="adminGrid">
       <div class="field">
         <label for="adminCode">管理コード</label>
-        <input id="adminCode" type="password" autocomplete="off" spellcheck="false">
+        <input id="adminCode" type="password" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="管理コードを入力（数字8桁）">
         <div class="fieldHint" id="teacherStatus">管理コードの確認は8時間有効です。担当するクラスを切り替えても再入力は不要です。</div>
         <div class="buttonRow">
           <button id="createTeacherButton" class="secondary smallBtn" type="button">初めて使う：管理コードを作成</button>
@@ -1865,7 +1865,7 @@
   }
 
   async function createTeacher() {
-    if (!confirm("新しい教員用管理コードを作成します。既存の参加コードは自動では引き継がれません。表示された管理コードを安全な場所に保存してください。")) return;
+    if (!confirm("数字8桁の教員用管理コードを作成します。既存の参加コードは自動では引き継がれません。表示された管理コードを安全な場所に保存してください。")) return;
     var response = await apiRequest("/api/teachers", {}, false);
     rememberTeacherSession(response);
     els.newTeacherCode.value = response.code;

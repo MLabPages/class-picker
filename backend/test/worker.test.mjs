@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { makeWorker } from "../src/worker.mjs";
 import { cleanSettings, groupsFor, todayKey } from "../src/layout.mjs";
-import { verifySession } from "../src/crypto.mjs";
+import { teacherId, verifySession } from "../src/crypto.mjs";
 
 export class MemoryStore {
   constructor(data = {}) { this.data = structuredClone(data); this.pending = Promise.resolve(); }
@@ -41,7 +41,7 @@ function drawBody(roomId, s, deviceId, gender = "") { return { roomId, sessionId
 
 test("one teacher code authorizes both 1037 and 7015; another teacher cannot mutate either", async () => {
   const f = fixture(), a = await teacher(f), b = await teacher(f);
-  assert.match(a.code,/^CP-[A-Za-z0-9_-]{32}$/);
+  assert.match(a.code,/^[0-9]{8}$/);
   const login = await f.call("/api/session", { code: a.code }); assert.equal(login.status,200);
   for (const id of ["1037", "7015"]) {
     const s = await room(f,a,id);
@@ -58,6 +58,51 @@ test("one teacher code authorizes both 1037 and 7015; another teacher cannot mut
   assert.equal((await f.call("/api/session",{code:"reset2026"})).status,401);
   assert.equal((await f.call("/api/session",{code:a.code.slice(0,-1)+"!"})).status,401);
   assert.equal(JSON.stringify(f.store.data).includes(a.code),false);
+});
+
+test("numeric access code keeps the legacy teacher ownership, sessions, and class results", async () => {
+  const f = fixture(), legacyCode = "CP-" + "L".repeat(32), ownerId = await teacherId(legacyCode);
+  await f.store.update("control/teachers/" + ownerId, () => ({ disabled: false, createdAt: 1 }));
+  const legacy = await f.call("/api/session", { code: legacyCode }); assert.equal(legacy.status, 200);
+  for (const roomId of ["1037", "7015"]) {
+    const s = await room(f, legacy.body, roomId);
+    await f.call("/api/draw", drawBody(roomId, s, "existing-student"));
+  }
+  const before = structuredClone(f.store.data.rooms), code = "02468135", accessId = await teacherId(code);
+  await f.store.update("control/teachers/" + accessId, () => ({ disabled: false, teacherId: ownerId }));
+  const login = await f.call("/api/session", { code }); assert.equal(login.status, 200);
+  assert.equal(await verifySession(login.body.token, f.env.ADMIN_SIGNING_KEY), ownerId);
+  assert.deepEqual(f.store.data.rooms, before);
+  for (const roomId of ["1037", "7015"]) {
+    assert.equal((await f.call("/api/rooms/settings", { roomId, settings: settings() }, login.body.token)).status, 200);
+    assert.deepEqual(f.store.data.rooms[roomId], before[roomId]);
+  }
+  const another = await teacher(f); await room(f, another, "9001");
+  assert.equal((await f.call("/api/rooms/reset", { roomId: "9001" }, login.body.token)).status, 403);
+  assert.equal((await f.call("/api/session", { code: legacyCode })).status, 200);
+  await f.store.update("control/teachers/" + accessId, old => ({ ...old, disabled: true }));
+  assert.equal((await f.call("/api/session", { code })).status, 401);
+  assert.equal((await f.call("/api/session", { code: legacyCode })).status, 200);
+  await f.store.update("control/teachers/" + accessId, old => ({ ...old, disabled: false }));
+  await f.store.update("control/teachers/" + ownerId, old => ({ ...old, disabled: true }));
+  assert.equal((await f.call("/api/session", { code })).status, 401);
+  assert.equal((await f.call("/api/rooms/reset", { roomId: "1037" }, login.body.token)).status, 401);
+});
+
+test("numeric code format, invalid delegates, and rate limits fail closed", async () => {
+  const f = fixture();
+  for (const code of ["1234567", "123456789", 12345678, "１２３４５６７８", "1234 5678"]) {
+    assert.equal((await f.call("/api/session", { code })).status, 401);
+  }
+  const code = "13572468", id = await teacherId(code), parentId = await teacherId("CP-" + "P".repeat(32));
+  for (const target of ["../rooms/1037", null, "missing".padEnd(43, "x"), parentId]) {
+    await f.store.update("control/teachers/" + id, () => ({ disabled: false, teacherId: target }));
+    assert.equal((await f.call("/api/session", { code })).status, 401);
+  }
+  await f.store.update("control/teachers/" + parentId, () => ({ disabled: false, teacherId: id }));
+  assert.equal((await f.call("/api/session", { code })).status, 401);
+  f.env.AUTH_LIMIT = { limit: async () => ({ success: false }) };
+  assert.equal((await f.call("/api/session", { code })).status, 429);
 });
 
 test("new teachers cannot claim an existing or unmigrated room", async () => {

@@ -6,10 +6,10 @@ import { makeWorker } from "../src/worker.mjs";
 import { teacherId } from "../src/crypto.mjs";
 import { cleanSettings } from "../src/layout.mjs";
 
-const code="CP-"+"Q".repeat(32), id=await teacherId(code);
+const code="48271635", id=await teacherId("CP-"+"Q".repeat(32)), accessId=await teacherId(code);
 const settings=cleanSettings({mode:"plainNumber",totalStudents:8,groupSize:4,columnCount:2,sessionId:"qa-session",autoDailyReset:false});
 const store={
-  data:{control:{teachers:{[id]:{disabled:false,createdAt:1}}},rooms:{1037:{ownerId:id,settings:structuredClone(settings)},7015:{ownerId:id,settings:{...settings,sessionId:"qa-session-7015"}}}},
+  data:{control:{teachers:{[id]:{disabled:false,createdAt:1},[accessId]:{disabled:false,teacherId:id}}},rooms:{1037:{ownerId:id,settings:structuredClone(settings)},7015:{ownerId:id,settings:{...settings,sessionId:"qa-session-7015"}}}},
   async get(path) { let v=this.data;for(const p of path.split("/"))v=v?.[p];return structuredClone(v??null); },
   pending:Promise.resolve(),
   async update(path,fn) { const work=this.pending.then(async()=>{const parts=path.split("/"),key=parts.pop();let p=this.data;for(const part of parts)p=p[part]||={};const next=fn(structuredClone(p[key]??null));if(next!==undefined)p[key]=structuredClone(next);return structuredClone(p[key]??null);});this.pending=work.catch(()=>{});return work; }
@@ -41,7 +41,7 @@ const server=http.createServer(async(req,res)=>{
       const response=await worker.fetch(request,{ALLOWED_ORIGIN:base,ADMIN_SIGNING_KEY:"fixture-signing-secret-".repeat(4),REGISTRATION_ENABLED:"true",AUTH_LIMIT:{limit:async()=>({success:true})},OP_LIMIT:{limit:async()=>({success:true})},DAILY_LIMIT:{limit:async()=>({success:true})}});
       res.writeHead(response.status,Object.fromEntries(response.headers));res.end(await response.text());return;
     }
-    let html=source.replace('var API_BASE = "";', 'var API_BASE = '+JSON.stringify(base)+';')
+    let html=source.replace(/var API_BASE = "[^"]*";/, 'var API_BASE = '+JSON.stringify(base)+';')
       .replace('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js',base+'/firebase-app.js')
       .replace('https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js',base+'/firebase-database.js');
     // Show native alert text in the DOM so browser automation can inspect it without modal focus issues.
@@ -53,4 +53,4 @@ const server=http.createServer(async(req,res)=>{
     res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store"});res.end(html);
   } catch {res.writeHead(503);res.end("Fixture failure");}
 });
-server.listen(8847,"127.0.0.1",()=>console.log("Disposable browser QA: http://127.0.0.1:8847/?room=1037 ; test management code CP- followed by 32 Q characters. No production data."));
+server.listen(8847,"127.0.0.1",()=>console.log("Disposable browser QA: http://127.0.0.1:8847/?room=1037 ; test management code 48271635. No production data."));
