@@ -60,6 +60,28 @@ test("one teacher code authorizes both 1037 and 7015; another teacher cannot mut
   assert.equal(JSON.stringify(f.store.data).includes(a.code),false);
 });
 
+test("restored code requires a registered alias and preserves ownership and results", async () => {
+  const f = fixture(), owner = await teacher(f);
+  const ownerId = await verifySession(owner.token, f.env.ADMIN_SIGNING_KEY);
+  const accessId = await teacherId("reset2026");
+  assert.ok(accessId);
+  assert.equal((await f.call("/api/session", { code: "reset2026" })).status, 401);
+  const s = await room(f, owner, "1037");
+  await f.call("/api/draw", drawBody("1037", s, "existing-student"));
+  const before = structuredClone(f.store.data.rooms);
+  await f.store.update("control/teachers/" + accessId, () => ({ disabled: false, teacherId: ownerId }));
+  const login = await f.call("/api/session", { code: "reset2026" });
+  assert.equal(login.status, 200);
+  assert.equal(await verifySession(login.body.token, f.env.ADMIN_SIGNING_KEY), ownerId);
+  assert.deepEqual(f.store.data.rooms, before);
+  const other = await teacher(f); await room(f, other, "9001");
+  assert.equal((await f.call("/api/rooms/reset", { roomId: "9001" }, login.body.token)).status, 403);
+  assert.equal((await f.call("/api/session", { code: "reset2026!" })).status, 401);
+  assert.equal((await f.call("/api/session", { code: owner.code })).status, 200);
+  await f.store.update("control/teachers/" + ownerId, old => ({ ...old, disabled: true }));
+  assert.equal((await f.call("/api/session", { code: "reset2026" })).status, 401);
+});
+
 test("numeric access code keeps the legacy teacher ownership, sessions, and class results", async () => {
   const f = fixture(), legacyCode = "CP-" + "L".repeat(32), ownerId = await teacherId(legacyCode);
   await f.store.update("control/teachers/" + ownerId, () => ({ disabled: false, createdAt: 1 }));
